@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,4 +57,21 @@ impl IndexMut<(usize, usize)> for State {
         assert!(row < 4 && col < 4, "Row and column must be between 0 and 3");
         &mut self.data[Self::index_offset(row, col)]
     } 
+}
+
+impl fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for row in 0..4 {
+            for col in 0..4 {
+                if col > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", self.get(row, col))?;
+            }
+            if row < 3 {
+                writeln!(f)?;
+            }
+        }
+        Ok(())
+    }
 }
