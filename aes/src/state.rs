@@ -1,5 +1,5 @@
 use std::fmt;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, BitXor, BitXorAssign};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
@@ -40,7 +40,26 @@ impl State {
     pub fn set(&mut self, row: usize, col: usize, value: u8) {
         assert!(row < 4 && col < 4, "Row and column must be between 0 and 3");
         self.data[Self::index_offset(row, col)] = value;
-    }   
+    }
+    
+    #[inline]
+    pub fn get_col(&self, col: usize) -> [u8; 4] {
+        assert!(col < 4, "Column must be between 0 and 3");
+        [
+            self.get(0, col),
+            self.get(1, col),
+            self.get(2, col),
+            self.get(3, col),
+        ]
+    }
+
+    #[inline]
+    pub fn set_col(&mut self, col: usize, values: [u8; 4]) {
+        assert!(col < 4, "Column must be between 0 and 3");
+        for row in 0..4 {
+            self.set(row, col, values[row]);
+        }
+    }
 }
 
 impl Index<(usize, usize)> for State {
@@ -73,5 +92,29 @@ impl fmt::Display for State {
             }
         }
         Ok(())
+    }
+}
+
+impl BitXor for State {
+    type Output = Self;
+
+    fn bitxor(self, other: Self) -> Self {
+        let mut result = Self::zero();
+        for row in 0..4 {
+            for col in 0..4 {
+                result[(row, col)] = self[(row, col)] ^ other[(row, col)];
+            }
+        }
+        result
+    }
+}
+
+impl BitXorAssign for State {
+    fn bitxor_assign(&mut self, other: Self) {
+        for row in 0..4 {
+            for col in 0..4 {
+                self[(row, col)] ^= other[(row, col)];
+            }
+        }
     }
 }

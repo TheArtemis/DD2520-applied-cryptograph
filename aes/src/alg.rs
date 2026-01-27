@@ -1,0 +1,172 @@
+use crate::state::State;
+use crate::sbox::AES_SBOX;
+use crate::gf256::{gf256_mul2, gf256_mul3};
+
+pub struct AES128 {
+    key: [u8; 16],
+}
+
+impl AES128 {
+    pub fn new(key: [u8; 16]) -> Self {
+        Self { key }
+    }   
+
+    pub fn cipher(&self, state: &mut State) {
+        let key_schedule = self.key_expansion(self.key);
+        
+        self.add_round_key(state, &key_schedule[0]);
+        
+        for i in 1..10 {
+            self.sub_bytes(state);
+            self.shift_rows(state);
+            self.mix_columns(state);
+            self.add_round_key(state, &key_schedule[i]);
+        }
+        
+        self.sub_bytes(state);
+        self.shift_rows(state);
+        self.add_round_key(state, &key_schedule[10]);
+    }
+
+    
+
+    fn add_round_key(&self, state: &mut State, round_key: &State) {
+        *state ^= *round_key;
+    }
+
+    fn sub_bytes(&self, state: &mut State) {
+        for row in 0..4 {
+            for col in 0..4 {
+                state[(row, col)] = AES_SBOX[state[(row, col)] as usize];
+            }
+        }
+    }
+
+    fn shift_rows(&self, state: &mut State) {
+        // row 0: no shift
+        // row 1: left shift by 1
+        let temp = state[(1, 0)];
+        state[(1, 0)] = state[(1, 1)];
+        state[(1, 1)] = state[(1, 2)];
+        state[(1, 2)] = state[(1, 3)];
+        state[(1, 3)] = temp;
+        
+        // row 2: left shift by 2
+        let temp0 = state[(2, 0)];
+        let temp1 = state[(2, 1)];
+        state[(2, 0)] = state[(2, 2)];
+        state[(2, 1)] = state[(2, 3)];
+        state[(2, 2)] = temp0;
+        state[(2, 3)] = temp1;
+        
+        // row 3: left shift by 3 (or right shift by 1)
+        let temp = state[(3, 3)];
+        state[(3, 3)] = state[(3, 2)];
+        state[(3, 2)] = state[(3, 1)];
+        state[(3, 1)] = state[(3, 0)];
+        state[(3, 0)] = temp;
+    }
+
+    fn mix_columns(&self, state: &mut State) {
+        for col in 0..4 {
+            let mut column = state.get_col(col);
+            self.mix_column(&mut column);
+            state.set_col(col, column);
+        }
+    }
+
+    fn mix_column(&self, vec: &mut [u8]) {  
+        
+        // matrix representation:
+        /* 
+        | 02 03 01 01 |   
+        | 01 02 03 01 |   
+        | 01 01 02 03 |   
+        | 03 01 01 02 |        
+        */
+
+        let [a, b, c, d] = [vec[0], vec[1], vec[2], vec[3]];        
+
+        vec[0] = gf256_mul2(a) ^ gf256_mul3(b) ^ c ^ d;
+        vec[1] = a ^ gf256_mul2(b) ^ gf256_mul3(c) ^ d;
+        vec[2] = a ^ b ^ gf256_mul2(c) ^ gf256_mul3(d);
+        vec[3] = gf256_mul3(a) ^ b ^ c ^ gf256_mul2(d);
+    }
+
+    fn key_expansion(&self, key: [u8; 16]) -> Vec<State> {
+        // split key into 4 words (w[0..3])
+        let mut words: [[u8; 4]; 44] = [[0; 4]; 44];
+        
+        // initialize first 4 words from key
+        for i in 0..4 {
+            words[i] = [
+                key[i * 4],
+                key[i * 4 + 1],
+                key[i * 4 + 2],
+                key[i * 4 + 3],
+            ];
+        }
+        
+        // generate remaining 40 words (w[4..43])
+        for i in 4..44 {
+            let mut temp = words[i - 1];
+            
+            if i % 4 == 0 {
+                temp = self.rot_word(temp);
+                temp = self.sub_word(temp);
+                let rcon = self.rcon(i / 4);
+                for j in 0..4 {
+                    temp[j] ^= rcon[j];
+                }
+            }
+            
+            // xor with word 4 positions back
+            for j in 0..4 {
+                words[i][j] = words[i - 4][j] ^ temp[j];
+            }
+        }
+        
+        // group every 4 words into a State (11 round keys total)
+        let mut keys = Vec::new();
+        for i in 0..11 {
+            let mut state_data = [0u8; 16];
+            for j in 0..4 {
+                let word = words[i * 4 + j];
+                state_data[j * 4] = word[0];
+                state_data[j * 4 + 1] = word[1];
+                state_data[j * 4 + 2] = word[2];
+                state_data[j * 4 + 3] = word[3];
+            }
+            keys.push(State::new(state_data));
+        }
+        
+        keys
+    }
+
+    fn rot_word(&self, word: [u8; 4]) -> [u8; 4] {
+        let [a, b, c, d] = word;
+        [b, c, d, a]
+    }
+
+    fn sub_word(&self, word: [u8; 4]) -> [u8; 4] {
+        let [a, b, c, d] = word;
+        [AES_SBOX[a as usize], AES_SBOX[b as usize], AES_SBOX[c as usize], AES_SBOX[d as usize]]
+    }
+
+    fn rcon(&self, round: usize) -> [u8; 4] {        
+        const RCON_TABLE: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36];
+        
+        if round == 0 {
+            [0x00, 0x00, 0x00, 0x00]
+        } else if round <= 10 {
+            [RCON_TABLE[round - 1], 0x00, 0x00, 0x00]
+        } else {
+            // for round > 10, compute using xtime (2^(round-1))
+            let mut rcon_val = 0x01u8;
+            for _ in 1..round {
+                rcon_val = crate::gf256::xtime(rcon_val);
+            }
+            [rcon_val, 0x00, 0x00, 0x00]
+        }
+    }
+}
