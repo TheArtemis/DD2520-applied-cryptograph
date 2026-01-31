@@ -1,59 +1,68 @@
-fn hex_to_binary(hex: &str) -> String {
-    let mut binary = String::new();
-    for c in hex.chars() {
-       let byte = match c {
-         '0' => "0000",
-         '1' => "0001",
-         '2' => "0010",
-         '3' => "0011",
-         '4' => "0100", 
-         '5' => "0101",
-         '6' => "0110",
-         '7' => "0111",
-         '8' => "1000",
-         '9' => "1001",
-         'a' => "1010",
-         'b' => "1011",
-         'c' => "1100",
-         'd' => "1101",
-         'e' => "1110",
-         'f' => "1111",
-         _ => panic!("Invalid hex character: {}", c),
-       };
-       binary.push_str(byte);
+fn hex_decode(s: &str) -> Vec<u8> {
+    assert!(s.len() % 2 == 0, "Hex string must have an even amount of characters");
+
+    // hex representation uses 2 characters per byte
+    let mut bytes: Vec<u8> = Vec::with_capacity(s.len() / 2);
+
+    let chars: Vec<char> = s.chars().collect();
+
+    for i in (0..s.len()).step_by(2) {
+        let high = hex_value(chars[i]);
+        let low = hex_value(chars[i+1]);
+
+        let byte = (high << 4) | low;
+        bytes.push(byte);
     }
-    binary
+    
+    return bytes;
 }
 
-fn binary_to_decimal(binary: &str) -> u8 {
-    let mut decimal = 0;
-    for (i, c) in binary.chars().rev().enumerate() {
-        if c == '1' {
-            decimal += 2_u8.pow(i as u32);
-        }
+fn hex_value(c: char) -> u8 {
+    match c {
+        '0'..='9' => c as u8 - b'0', // 48u8
+        'a'..='f' => c as u8 - b'a' + 10, // 97u8 + 10
+        'A'..='F' => c as u8 - b'A' + 10, // 65u8 + 10
+        _ => panic!("invalid hex character: {}", c),
     }
-    decimal
 }
 
-fn binary_to_base64(binary: &str) -> String {
-    let mut base64 = String::new();
-    for i in (0..binary.len()).step_by(6) {
-        let chunk = &binary[i..i+6];
-        let decimal = binary_to_decimal(chunk);
-        let base64_char = match decimal {
-            0..=25 => (b'A' + decimal as u8) as char,
-            26..=51 => (b'a' + (decimal - 26) as u8) as char,
-            52..=61 => (b'0' + (decimal - 52) as u8) as char,
-            62 => '+',
-            63 => '/',
-            _ => panic!("Invalid binary chunk: {}", chunk),
+fn base64_encode(bytes: &[u8]) -> String {
+    let mut base64 = String::with_capacity(bytes.len() * 2);
+    
+    for i in (0..bytes.len()).step_by(3) {
+        let b0 = bytes[i];
+        let b1 = bytes[i+1];
+        let b2 = bytes[i+2];
+
+        let combined: u32 = (b0 as u32) << 16 | (b1 as u32) << 8 | (b2 as u32);
+
+        let values = [
+            ((combined >> 18) & 0b0011_1111) as u8,
+            ((combined >> 12) & 0b0011_1111) as u8,
+            ((combined >> 6) & 0b0011_1111) as u8,
+            (combined & 0b0011_1111) as u8,
+        ];
+
+        for &i in &values {
+            base64.push(base64_value(i));
         };
-        base64.push(base64_char);
-    }
+    };
+
     base64
 }
 
+fn base64_value(v: u8) -> char {
+    match v {
+        0..=25  => (b'A' + v) as char, // 65u8 + 0..=25
+        26..=51 => (b'a' + (v - 26)) as char, // 97u8 + 0..=25
+        52..=61 => (b'0' + (v - 52)) as char, // 48u8 + 0..=11
+        62      => '+', // 43u8
+        63      => '/', // 47u8
+        _ => unreachable!(),
+    }
+}
+
 pub fn hex_to_base64(hex: &str) -> String {
-    let binary = hex_to_binary(hex);
-    binary_to_base64(&binary)
+    let bytes = hex_decode(hex);
+    base64_encode(&bytes)
 }

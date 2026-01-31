@@ -1,10 +1,4 @@
-mod state;
-mod alg;
-mod gf256;
-mod sbox;
-
-use crate::state::State;
-use crate::alg::AES128;
+use aes::{AES128, State};
 use std::io::{self, Read, Write};
 
 fn main() -> io::Result<()> {
