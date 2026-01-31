@@ -21,6 +21,10 @@ impl State {
         Self { data }
     }
 
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        &self.data
+    }
+
     pub fn zero() -> Self {
         Self::new([0; 16])
     }

@@ -5,33 +5,32 @@ mod sbox;
 
 use crate::state::State;
 use crate::alg::AES128;
-use std::fs;
+use std::io::{self, Read, Write};
 
-fn main() {
-    let input_data = fs::read("data/aes_sample.in")
-        .expect("Failed to read input file");
-    
-    if input_data.len() < 16 {
-        eprintln!("Error: Input file must contain at least 16 bytes");
-        return;
-    }
-    
-    let mut plaintext = [0u8; 16];
-    plaintext.copy_from_slice(&input_data[0..16]);
-    
-    let key = if input_data.len() >= 32 {
-        let mut k = [0u8; 16];
-        k.copy_from_slice(&input_data[16..32]);
-        k
-    } else {
-        [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
-         0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c]
-    };
-    
-    let mut state = State::new(plaintext);
-    
+fn main() -> io::Result<()> {
+    let mut stdin = io::stdin().lock();
+    let mut stdout = io::stdout().lock();
+
+    // Read 16-byte key from stdin
+    let mut key = [0u8; 16];
+    stdin.read_exact(&mut key)?;
+
     let aes = AES128::new(key);
-    aes.cipher(&mut state);
-    
-    println!("{}", state);
+    let mut block = [0u8; 16];
+
+    loop {
+        let n = stdin.read(&mut block)?;
+        if n == 0 {
+            break;
+        }
+        if n < 16 {
+            break;
+        }
+
+        let mut state = State::new(block);
+        aes.cipher(&mut state);
+        stdout.write_all(state.as_bytes())?;
+    }
+
+    Ok(())
 }
