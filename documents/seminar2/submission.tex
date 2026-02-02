@@ -1,0 +1,79 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    citecolor=blue
+}
+\usepackage{enumitem}
+
+% Title information
+\title{Seminar Preparation: Impact Considerations\\
+\large Focus: Smart Contracts with Cryptographic Verification}
+\author{Lorenzo Deflorian}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Technology Selection}
+
+\subsection{What it is}
+Smart contracts are programs stored on a blockchain---Ethereum being a common example---that execute automatically when certain conditions are met. Rather than relying on a central authority to enforce an agreement, the code itself becomes the enforcer through the network's consensus mechanism. Cryptographic signatures ensure only authorised parties can trigger the contract.
+
+\subsection{What it is used for}
+The range of applications is quite broad. In finance, they power decentralised lending platforms and peer-to-peer exchanges. Supply chains use them to track goods and trigger payments on delivery. Real estate deals can be settled by tokenising ownership and releasing funds when conditions are met. Voting systems benefit from the immutability and transparency they offer. Essentially, anywhere you need a contract enforced without trusting a middleman, smart contracts can reduce friction and costs.
+
+\subsection{How it works}
+When someone wants to execute a smart contract, they sign the transaction with their private key. Network participants verify this signature using the sender's public key, confirming that person actually authorised the transaction. If the signature is valid, the network runs the contract code. Once confirmed, the transaction becomes part of a block, which is hashed and cryptographically linked to the previous block. Tampering with any past transaction would break this chain and immediately reveal the fraud.
+
+\section{Notes}
+
+\subsection{What it is}
+At a deeper level, a smart contract is not just code, but logic embedded into a distributed system. Its behaviour is deterministic and enforced collectively by the network rather than by any single authority.
+
+\begin{itemize}
+    \item Code is deployed to the blockchain at a specific address. Once live, the logic remains fixed unless the original design explicitly allows upgrades under controlled conditions.
+    \item Unlike traditional software, execution is automatic: when predefined conditions occur---such as time passing, data arriving from an oracle, or a call from another contract---the code runs without human intervention.
+    \item Cryptography underpins trust. ECDSA signatures prove transaction authorisation, while cryptographic hashes link blocks together so any alteration to history is detectable.
+    \item No single party controls execution or can unilaterally cancel the contract. Enforcement is distributed across thousands of nodes.
+\end{itemize}
+
+\subsection{What it is used for}
+Because smart contracts remove the need for trusted intermediaries, they are particularly effective in environments where trust is expensive or difficult to establish.
+
+\begin{itemize}
+    \item \textbf{Finance}: Platforms such as Aave and Compound enable decentralised lending and borrowing. Decentralised exchanges allow peer-to-peer trading, and stablecoins maintain value through algorithmic rules.
+    \item \textbf{Supply chains}: Product histories can be recorded on-chain, with payments released automatically when delivery is confirmed via an external oracle.
+    \item \textbf{Real estate}: Ownership is represented by digital tokens. When contractual conditions are met, ownership transfers automatically.
+    \item \textbf{Voting}: Votes are recorded immutably on-chain. Cryptographic techniques can preserve voter privacy while allowing public verification of results.
+    \item \textbf{Other uses}: Automated insurance claims, royalty payments on resale of digital assets, and verifiable professional credentials.
+\end{itemize}
+
+\subsection{How it works}
+From a technical standpoint, smart contracts combine standard cryptographic primitives with a consensus mechanism that ensures all network participants agree on execution outcomes.
+
+\begin{itemize}
+    \item \textbf{Signing the transaction}: A user constructs a transaction request and signs it using their private key, typically via ECDSA.
+    \item \textbf{Verification by the network}: Nodes verify the signature and confirm message integrity using the sender's public key.
+    \item \textbf{Running the code}: Validators execute the contract in a virtual machine and reach consensus on the resulting state.
+    \item \textbf{Recording in the blockchain}: The transaction is included in a block that is cryptographically linked to previous blocks.
+    \item \textbf{Cost and incentives}: Users pay gas fees to compensate validators and prevent spam or abuse of the network.
+\end{itemize}
+
+\end{document}
