@@ -1,4 +1,4 @@
-fn hex_decode(s: &str) -> Vec<u8> {
+pub fn hex_decode(s: &str) -> Vec<u8> {
     assert!(s.len() % 2 == 0, "Hex string must have an even amount of characters");
 
     // hex representation uses 2 characters per byte
@@ -17,6 +17,26 @@ fn hex_decode(s: &str) -> Vec<u8> {
     return bytes;
 }
 
+pub fn hex_encode(bytes: &[u8]) -> String {
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        let high = hex_char(byte >> 4);
+        let low = hex_char(byte & 0x0F);
+        hex.push(high);
+        hex.push(low);
+    }
+    hex
+}
+
+fn hex_char(byte: u8) -> char {
+    match byte {
+        0..=9 => (b'0' + byte) as char, // 48u8 
+        10..=15 => (b'a' + byte - 10) as char, // 97u8
+        _ => panic!("invalid nibble: {}", byte),
+    }
+}
+
+
 fn hex_value(c: char) -> u8 {
     match c {
         '0'..='9' => c as u8 - b'0', // 48u8
@@ -26,7 +46,7 @@ fn hex_value(c: char) -> u8 {
     }
 }
 
-fn base64_encode(bytes: &[u8]) -> String {
+pub fn base64_encode(bytes: &[u8]) -> String {
     let mut base64 = String::with_capacity(bytes.len() * 2);
     
     for i in (0..bytes.len()).step_by(3) {
@@ -60,6 +80,45 @@ fn base64_value(v: u8) -> char {
         63      => '/', // 47u8
         _ => unreachable!(),
     }
+}
+
+fn base64_char_value(c: char) -> Option<u8> {
+    match c {
+        'A'..='Z' => Some((c as u8) - b'A'),
+        'a'..='z' => Some((c as u8) - b'a' + 26),
+        '0'..='9' => Some((c as u8) - b'0' + 52),
+        '+' => Some(62),
+        '/' => Some(63),
+        '=' => None, // padding
+        _ => panic!("invalid base64 character: {}", c),
+    }
+}
+
+pub fn base64_decode(s: &str) -> Vec<u8> {
+    let chars: Vec<u8> = s
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .filter_map(|c| base64_char_value(c))
+        .collect();
+
+    let mut bytes = Vec::with_capacity((chars.len() * 3) / 4);
+
+    for i in (0..chars.len()).step_by(4) {
+        let v0 = chars[i];
+        let v1 = chars.get(i + 1).copied().unwrap_or(0);
+        let v2 = chars.get(i + 2).copied().unwrap_or(0);
+        let v3 = chars.get(i + 3).copied().unwrap_or(0);
+
+        bytes.push((v0 << 2) | (v1 >> 4));
+        if i + 2 < chars.len() {
+            bytes.push((v1 << 4) | (v2 >> 2));
+        }
+        if i + 3 < chars.len() {
+            bytes.push((v2 << 6) | v3);
+        }
+    }
+
+    bytes
 }
 
 pub fn hex_to_base64(hex: &str) -> String {
