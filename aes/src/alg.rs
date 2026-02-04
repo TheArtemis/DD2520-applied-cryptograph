@@ -1,6 +1,6 @@
 use crate::state::State;
-use crate::sbox::AES_SBOX;
-use crate::gf256::{gf256_mul2, gf256_mul3};
+use crate::sbox::{AES_SBOX, AES_INV_SBOX};
+use crate::gf256::{gf256_mul, gf256_mul2, gf256_mul3};
 
 pub struct AES128 {
     key: [u8; 16],
@@ -28,7 +28,23 @@ impl AES128 {
         self.add_round_key(state, &key_schedule[10]);
     }
 
-    
+    /// Inverse cipher (decryption). Decrypts the state in place.
+    pub fn inv_cipher(&self, state: &mut State) {
+        let key_schedule = self.key_expansion(self.key);
+
+        self.add_round_key(state, &key_schedule[10]);
+
+        for i in (1..10).rev() {
+            self.inv_shift_rows(state);
+            self.inv_sub_bytes(state);
+            self.add_round_key(state, &key_schedule[i]);
+            self.inv_mix_columns(state);
+        }
+
+        self.inv_shift_rows(state);
+        self.inv_sub_bytes(state);
+        self.add_round_key(state, &key_schedule[0]);
+    }
 
     fn add_round_key(&self, state: &mut State, round_key: &State) {
         *state ^= *round_key;
@@ -38,6 +54,14 @@ impl AES128 {
         for row in 0..4 {
             for col in 0..4 {
                 state[(row, col)] = AES_SBOX[state[(row, col)] as usize];
+            }
+        }
+    }
+
+    fn inv_sub_bytes(&self, state: &mut State) {
+        for row in 0..4 {
+            for col in 0..4 {
+                state[(row, col)] = AES_INV_SBOX[state[(row, col)] as usize];
             }
         }
     }
@@ -67,6 +91,31 @@ impl AES128 {
         state[(3, 0)] = temp;
     }
 
+    fn inv_shift_rows(&self, state: &mut State) {
+        // row 0: no shift
+        // row 1: right shift by 1 (inverse of left by 1)
+        let temp = state[(1, 3)];
+        state[(1, 3)] = state[(1, 2)];
+        state[(1, 2)] = state[(1, 1)];
+        state[(1, 1)] = state[(1, 0)];
+        state[(1, 0)] = temp;
+
+        // row 2: right shift by 2 (same as left by 2, symmetric)
+        let temp0 = state[(2, 0)];
+        let temp1 = state[(2, 1)];
+        state[(2, 0)] = state[(2, 2)];
+        state[(2, 1)] = state[(2, 3)];
+        state[(2, 2)] = temp0;
+        state[(2, 3)] = temp1;
+
+        // row 3: right shift by 3 (inverse of left by 3 = left by 1)
+        let temp = state[(3, 0)];
+        state[(3, 0)] = state[(3, 1)];
+        state[(3, 1)] = state[(3, 2)];
+        state[(3, 2)] = state[(3, 3)];
+        state[(3, 3)] = temp;
+    }
+
     fn mix_columns(&self, state: &mut State) {
         for col in 0..4 {
             let mut column = state.get_col(col);
@@ -91,6 +140,28 @@ impl AES128 {
         vec[1] = a ^ gf256_mul2(b) ^ gf256_mul3(c) ^ d;
         vec[2] = a ^ b ^ gf256_mul2(c) ^ gf256_mul3(d);
         vec[3] = gf256_mul3(a) ^ b ^ c ^ gf256_mul2(d);
+    }
+
+    fn inv_mix_columns(&self, state: &mut State) {
+        for col in 0..4 {
+            let mut column = state.get_col(col);
+            self.inv_mix_column(&mut column);
+            state.set_col(col, column);
+        }
+    }
+
+    fn inv_mix_column(&self, vec: &mut [u8]) {
+        // Inverse MixColumns matrix in GF(2^8):
+        // | 0e 0b 0d 09 |
+        // | 09 0e 0b 0d |
+        // | 0d 09 0e 0b |
+        // | 0b 0d 09 0e |
+        let [a, b, c, d] = [vec[0], vec[1], vec[2], vec[3]];
+
+        vec[0] = gf256_mul(a, 0x0e) ^ gf256_mul(b, 0x0b) ^ gf256_mul(c, 0x0d) ^ gf256_mul(d, 0x09);
+        vec[1] = gf256_mul(a, 0x09) ^ gf256_mul(b, 0x0e) ^ gf256_mul(c, 0x0b) ^ gf256_mul(d, 0x0d);
+        vec[2] = gf256_mul(a, 0x0d) ^ gf256_mul(b, 0x09) ^ gf256_mul(c, 0x0e) ^ gf256_mul(d, 0x0b);
+        vec[3] = gf256_mul(a, 0x0b) ^ gf256_mul(b, 0x0d) ^ gf256_mul(c, 0x09) ^ gf256_mul(d, 0x0e);
     }
 
     fn key_expansion(&self, key: [u8; 16]) -> Vec<State> {
@@ -168,5 +239,27 @@ impl AES128 {
             }
             [rcon_val, 0x00, 0x00, 0x00]
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trip_encrypt_decrypt() {
+        let key: [u8; 16] = [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c];
+        let plaintext: [u8; 16] = [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34];
+
+        let aes = AES128::new(key);
+        let mut state = State::new(plaintext);
+
+        aes.cipher(&mut state);
+        let _ciphertext = *state.as_bytes();
+
+        aes.inv_cipher(&mut state);
+        let decrypted = *state.as_bytes();
+
+        assert_eq!(plaintext, decrypted, "decrypt(cipher(plaintext)) should equal plaintext");
     }
 }
