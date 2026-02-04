@@ -1,6 +1,3 @@
-//! Set 1 Challenge 7: AES in ECB mode.
-//! Decrypt the base64-encoded file with key "YELLOW SUBMARINE" using our AES inv_cipher.
-
 use aes::{AES128, State};
 use cryptopals::set1::encoding::base64_decode;
 
@@ -34,7 +31,6 @@ fn test_challenge7_decrypt_aes_ecb() {
 
     println!("{}", plaintext);
 
-    // Same plaintext as challenge 6 (Vanilla Ice lyrics)
     assert!(
         plaintext.contains("I'm back"),
         "Decrypted text should contain 'I'm back', got: {}",
