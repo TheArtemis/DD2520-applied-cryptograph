@@ -6,11 +6,21 @@ pub fn pkcs7_pad_str(data: &str, block_size: usize) -> String {
 }
 
 pub fn pkcs7_unpad(data: &[u8]) -> Vec<u8> {
+    if data.is_empty() {
+        return data.to_vec();
+    }
     let padding_length = data[data.len() - 1] as usize;
-
-    let mut res = data.to_vec().clone();
-    res.truncate(data.len() - padding_length);
-    res
+    // Only strip if padding looks valid: length in 1..=16 and all pad bytes match
+    if padding_length >= 1
+        && padding_length <= 16
+        && data.len() >= padding_length
+        && data[data.len() - padding_length..].iter().all(|&b| b == data[data.len() - 1])
+    {
+        let mut res = data.to_vec();
+        res.truncate(data.len() - padding_length);
+        return res;
+    }
+    data.to_vec()
 }
 
 pub fn pkcs7_unpad_str(data: &str) -> String {

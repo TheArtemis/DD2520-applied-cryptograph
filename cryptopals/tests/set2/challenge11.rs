@@ -18,7 +18,7 @@ fn test_challenge11_get_random_key_different_each_time() {
 fn test_challenge11_oracle_encrypt() {
     let plaintext = vec![b'A'; 48];
     for _ in 0..10 {
-        let (ciphertext, mode) = oracle_encrypt(&plaintext);
+        let (ciphertext, mode) = oracle_encrypt(&plaintext, None, None);
         let guessed_mode = oracle_guess_mode(&ciphertext);
         assert_eq!(mode, guessed_mode, "Mode should be guessed correctly");
     }

@@ -37,12 +37,12 @@ pub fn get_random_mode() -> Mode {
     }
 }
 
-
-
 pub fn oracle_encrypt(
-    plaintext: &[u8]
+    plaintext: &[u8],
+    key: Option<[u8; 16]>,
+    mode: Option<Mode>,
 ) -> (Vec<u8>, Mode) {
-    let key = get_random_key();
+    let key = key.unwrap_or_else(get_random_key);
 
     let prepending_bytes = get_random_bytes();
     let appending_bytes = get_random_bytes();
@@ -51,7 +51,7 @@ pub fn oracle_encrypt(
     combined_bytes.extend(plaintext);
     combined_bytes.extend(appending_bytes);
 
-    let mode = get_random_mode();
+    let mode = mode.unwrap_or_else(get_random_mode);
     let ciphertext = match mode {
         Mode::ECB => aes_128_ecb_encrypt(&combined_bytes, &key),
         Mode::CBC => {
@@ -60,6 +60,18 @@ pub fn oracle_encrypt(
         }
     };
     (ciphertext, mode)
+}
+
+pub fn ecb_oracle_fixed(
+    plaintext: &[u8],
+    key: [u8; 16],
+    secret: &[u8],
+) -> Vec<u8> {
+    let mut combined = Vec::new();
+    combined.extend(plaintext);
+    combined.extend(secret);
+
+    aes_128_ecb_encrypt(&combined, &key)
 }
 
 pub fn oracle_guess_mode(
