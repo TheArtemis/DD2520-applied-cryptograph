@@ -40,3 +40,19 @@ pub fn pkcs7_pad(data: &[u8], block_size: usize) -> Vec<u8> {
     }
     padded
 }
+
+pub fn pkcs7_validate_str(data: &str) -> bool {
+    let data_bytes = data.as_bytes();
+    pkcs7_validate(data_bytes)
+}
+
+pub fn pkcs7_validate(data: &[u8]) -> bool {
+    if data.is_empty() {
+        return true;
+    }
+    let padding_length = data[data.len() - 1] as usize;
+    padding_length >= 1
+        && padding_length <= 16
+        && data.len() >= padding_length
+        && data[data.len() - padding_length..].iter().all(|&b| b == data[data.len() - 1])
+}
