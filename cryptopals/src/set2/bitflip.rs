@@ -44,7 +44,7 @@ pub fn bitflip_attack(ciphertext: &[u8], injected_bytes: &[u8; 16]) -> Vec<u8> {
     let known_plaintext = injected_bytes;
     let target_plaintext = b"admin=trueAAAAAA";
 
-    // X ^ A ^ B  = X ^ (A ^ B)
+    // P[i] = D(C[i]) ^ C[i-1]
     for i in 0..16 {
         let delta = known_plaintext[i] ^ target_plaintext[i];
         new_ciphertext[attack_bloc_start_index + i] ^= delta;        
