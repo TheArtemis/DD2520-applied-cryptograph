@@ -21,7 +21,7 @@ pub fn encrypt_user_data(input: &str, key: Option<&[u8; 16]>) -> Vec<u8> {
 }
 
 pub fn is_admin(ciphertext: &[u8], key: &[u8; 16]) -> bool {
-    let decrypted = cbc_decrypt(ciphertext, &key, None);
+    let decrypted = cbc_decrypt(ciphertext, &key, None, None);
     let decrypted_str = String::from_utf8_lossy(&decrypted);
     decrypted_str.contains("admin=true")
 }

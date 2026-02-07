@@ -26,7 +26,12 @@ pub fn cbc_encrypt(plaintext: &[u8], key: &[u8; 16], iv: Option<&[u8; 16]>) -> V
     cipher_text
 }
 
-pub fn cbc_decrypt(cipher_text: &[u8], key: &[u8; 16], iv: Option<&[u8; 16]>) -> Vec<u8> {
+pub fn cbc_decrypt(
+    cipher_text: &[u8],
+    key: &[u8; 16],
+    iv: Option<&[u8; 16]>,
+    unpad: Option<bool>,
+) -> Vec<u8> {
     let mut plaintext = Vec::new();
 
     // Default IV to all zeros
@@ -37,17 +42,20 @@ pub fn cbc_decrypt(cipher_text: &[u8], key: &[u8; 16], iv: Option<&[u8; 16]>) ->
     let decrypted_block = aes_128_ecb_decrypt(blocks[0], key);
     let xor_result = xor_bytes(&decrypted_block, iv);
     plaintext.extend_from_slice(&xor_result);
-    
+
     let mut prev_cipher_block = blocks[0].to_vec();
 
     for cipher_block in blocks.iter().skip(1) {
         let decrypted_block = aes_128_ecb_decrypt(cipher_block, key);
         let xor_result = xor_bytes(&decrypted_block, &prev_cipher_block);
         plaintext.extend_from_slice(&xor_result);
-        
+
         prev_cipher_block = cipher_block.to_vec();
     }
 
-    // Remove padding
-    pkcs7_unpad(&plaintext)
+    if unpad.unwrap_or(true) {
+        pkcs7_unpad(&plaintext)
+    } else {
+        plaintext
+    }
 }

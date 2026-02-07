@@ -18,7 +18,7 @@ fn test_challenge10_decrypt_file() {
     let key: [u8; 16] = KEY.try_into().expect("key must be 16 bytes");
     let iv = [0u8; 16]; // All zeros
 
-    let plaintext_bytes = cbc_decrypt(&ciphertext, &key, Some(&iv));
+    let plaintext_bytes = cbc_decrypt(&ciphertext, &key, Some(&iv), None);
     let plaintext = String::from_utf8_lossy(&plaintext_bytes);
 
     println!("{}", plaintext);
@@ -39,7 +39,7 @@ fn test_challenge10_encrypt_then_decrypt() {
 
     let cipher_text = cbc_encrypt(plaintext, &key, Some(&iv));
     
-    let decrypted = cbc_decrypt(&cipher_text, &key, Some(&iv));
+    let decrypted = cbc_decrypt(&cipher_text, &key, Some(&iv), None);
     
     assert_eq!(
         plaintext,

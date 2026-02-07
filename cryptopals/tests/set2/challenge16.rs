@@ -29,7 +29,7 @@ fn test_first_function() {
     let ciphertext = encrypt_user_data(input, Some(&key));
     
     // Decrypt and verify
-    let decrypted = cbc_decrypt(&ciphertext, &key, None);
+    let decrypted = cbc_decrypt(&ciphertext, &key, None, None);
     let decrypted_str = String::from_utf8_lossy(&decrypted);
     
     // Verify prepend and append are present
