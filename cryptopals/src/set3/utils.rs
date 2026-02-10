@@ -26,9 +26,22 @@ pub fn random_cbc_encrypt(key: &[u8; 16], iv: &[u8; 16]) -> Vec<u8> {
     ciphertext
 }
 
-/// Oracle: decrypt and check padding. Must validate the raw decrypted plaintext
-/// (before stripping padding), otherwise the padding oracle is wrong.
 pub fn check_padding(ciphertext: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> bool {
     let raw_plaintext = cbc_decrypt(ciphertext, key, Some(iv), Some(false));
     pkcs7_validate(&raw_plaintext)
+}
+
+// Holds the key for the padding oracle attack.
+pub struct PaddingOracle {
+    key: [u8; 16],
+}
+
+impl PaddingOracle {
+    pub fn new(key: [u8; 16]) -> Self {
+        Self { key }
+    }
+
+    pub fn check_padding(&self, ciphertext: &[u8], iv: &[u8; 16]) -> bool {
+        check_padding(ciphertext, &self.key, iv)
+    }
 }
