@@ -110,9 +110,9 @@ m \approx \frac{0.027n}{(n-1)IC - 0.038n + 0.065}
 
 where $m$ is the estimated key length, $n$ is the text length, and $IC$ is the Index of Coincidence.
 
-\textbf{Result:} Estimated key length = \textbf{5.5} (rounded to 6)
+\textbf{Result:} Estimated key length = \textbf{5.5} (rough estimate)
 
-This suggests a relatively short key. This is consistent with Vigenère ciphers, which typically use short keys, but could also apply to other polyalphabetic ciphers.
+This suggests a relatively short key, but the Friedman test is only an approximation and can be off by a few characters. We therefore treat it as a starting point and rely on Kasiski examination and column ICs to confirm the exact length.
 
 \subsubsection{Kasiski Examination}
 
@@ -236,7 +236,7 @@ All eight key characters were recovered correctly through frequency analysis, an
 \begin{itemize}
     \item \textbf{Ciphertext length:} 4065 characters
     \item \textbf{Index of Coincidence:} 0.0429 (indicated polyalphabetic cipher)
-    \item \textbf{Estimated key length (Friedman):} 5.5
+    \item \textbf{Estimated key length (Friedman):} 5.5 (approximate)
     \item \textbf{Key length candidates (Kasiski):} 8 (confirmed)
     \item \textbf{Column IC verification:} All columns $\approx$ 0.065 (confirmed key length and cipher type)
     \item \textbf{Identified cipher:} Vigenère
@@ -337,7 +337,7 @@ The plaintext discusses cryptanalytic reasoning about repeated n-grams and perio
 \newpage
 \section{Conclusions}
 
-The ciphertexts were successfully broken using classical cryptanalytic techniques. Cipher1 was identified as a polyalphabetic cipher (Vigenère) with key length 8; the key \texttt{INVENTOR} was recovered through Kasiski examination and frequency analysis on columns. Cipher2 was identified as a monoalphabetic substitution cipher based on its high Index of Coincidence and was solved using frequency analysis and quadgram-scored hill-climbing.
+The ciphertexts were successfully broken using classical cryptanalytic techniques. Cipher1 was identified as a polyalphabetic cipher (Vigenère) with key length 8; the key \texttt{INVENTOR} was recovered through Kasiski examination and frequency analysis on columns. The Friedman estimate (5.5) was treated as a rough starting point and refined using Kasiski and column ICs. Cipher2 was identified as a monoalphabetic substitution cipher based on its high Index of Coincidence and was solved using frequency analysis and quadgram-scored hill-climbing.
 
 The Index of Coincidence values provided an effective first discriminator: 0.0429 for Cipher1 (polyalphabetic) and 0.0701 for Cipher2 (monoalphabetic). These methods demonstrate that classical ciphers, while historically significant, are vulnerable to statistical cryptanalysis and should not be used for modern secure communication.
 
