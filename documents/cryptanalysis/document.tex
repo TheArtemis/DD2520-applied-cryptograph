@@ -1,0 +1,344 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{seqsplit}
+\usepackage{xcolor}
+
+% Configure listings for better text wrapping
+\lstset{
+    breaklines=true,
+    breakatwhitespace=false,
+    basicstyle=\footnotesize\ttfamily,
+    columns=fullflexible,
+    frame=single,
+    prebreak=\mbox{\textcolor{gray}{$\hookleftarrow$}\space},
+    postbreak=\mbox{\space\textcolor{gray}{$\hookrightarrow$}},
+    breakindent=0pt
+}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+\geometry{margin=1in,bottom=1.2in}
+
+% Table of contents formatting
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\setlength{\cftsecnumwidth}{3em}
+
+% Section formatting
+\titleformat{\section}
+{\Large\bfseries}
+{\thesection}{1em}{}
+
+\titleformat{\subsection}
+{\large\bfseries}
+{\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+{\normalsize\bfseries}
+{\thesubsubsection}{1em}{}
+
+\title{Cryptanalysis of Classical Ciphers}
+\author{Lorenzo Deflorian}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+This report describes the cryptanalysis of an unknown ciphertext. The goal was to identify the encryption method, recover the encryption key (if applicable), and decrypt the message without any prior knowledge of the cipher type or key.
+
+The analysis used classical cryptanalytic techniques including:
+\begin{itemize}
+    \item Index of Coincidence (IC) analysis
+    \item Frequency analysis
+    \item Pattern analysis (Kasiski examination)
+    \item Statistical tests (Friedman test, chi-squared test)
+\end{itemize}
+
+\section{Cryptanalysis of Vigenère Cipher (Cipher1)}
+
+\subsection{Initial Observations}
+
+The ciphertext consists of 4065 uppercase alphabetic characters with no spaces or punctuation. This format is typical of classical cipher implementations, but provides no immediate clues about the specific encryption method used.
+
+\subsection{Determining the Cipher Type}
+
+\subsubsection{Index of Coincidence Analysis}
+
+The first step in cryptanalysis is to determine whether the cipher is monoalphabetic or polyalphabetic. This is done using the \textbf{Index of Coincidence (IC)}:
+
+\[
+IC = \frac{\sum_{i=A}^{Z} n_i(n_i - 1)}{n(n-1)}
+\]
+
+where $n_i$ is the frequency of letter $i$ and $n$ is the total number of letters.
+
+\textbf{Result:} The calculated IC was \textbf{0.0429}.
+
+To interpret this value, we compare it to known benchmarks:
+\begin{itemize}
+    \item English plaintext: IC $\approx$ 0.065
+    \item Monoalphabetic substitution: IC $\approx$ 0.065 (preserves letter frequencies)
+    \item Random text: IC $\approx$ 0.038
+    \item Polyalphabetic cipher (Vigenère): IC $\approx$ 0.038--0.045
+\end{itemize}
+
+The low IC value of 0.0429 strongly indicates a \textbf{polyalphabetic cipher}. This rules out simple substitution ciphers, which would maintain English letter frequencies and thus have an IC close to 0.065.
+
+However, this alone does not identify the specific polyalphabetic cipher. Possible candidates include Vigenère, Beaufort, autokey, or other polyalphabetic systems.
+
+\subsection{Key Length Determination}
+
+\subsubsection{Friedman Test}
+
+To narrow down the cipher type, we estimate the key length using the Friedman test:
+
+\[
+m \approx \frac{0.027n}{(n-1)IC - 0.038n + 0.065}
+\]
+
+where $m$ is the estimated key length, $n$ is the text length, and $IC$ is the Index of Coincidence.
+
+\textbf{Result:} Estimated key length = \textbf{5.5} (rounded to 6)
+
+This suggests a relatively short key. This is consistent with Vigenère ciphers, which typically use short keys, but could also apply to other polyalphabetic ciphers.
+
+\subsubsection{Kasiski Examination}
+
+To verify the key length estimate, we perform a Kasiski examination. This technique identifies repeated patterns (n-grams) in the ciphertext and analyzes the distances between them. If the cipher uses a repeating key (like Vigenère), these distances will often be multiples of the key length.
+
+The analysis searched for repeated 3-grams, 4-grams, and 5-grams:
+
+\textbf{Result:} Key length candidates from pattern analysis:
+\[
+[2, 4, 8, 16, 3, 6, 12, 24, 5, 10]
+\]
+
+The value \textbf{8} appears prominently in this list. The presence of multiples of 8 (16, 24) further supports this conclusion, as they would naturally occur when the same plaintext pattern aligns with the same key position multiple times.
+
+\subsubsection{Column Index of Coincidence Verification}
+
+To verify that 8 is indeed the correct key length, we divide the ciphertext into 8 columns (one for each key position) and calculate the IC for each column independently. If the key length is correct, each column should represent a monoalphabetic substitution, and thus have an IC close to 0.065.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Column} & \textbf{IC} \\
+\hline
+1 & 0.0620 \\
+2 & 0.0699 \\
+3 & 0.0673 \\
+4 & 0.0615 \\
+5 & 0.0643 \\
+6 & 0.0602 \\
+7 & 0.0647 \\
+8 & 0.0660 \\
+\hline
+\textbf{Average} & \textbf{0.0645} \\
+\hline
+\end{tabular}
+\caption{Column Index of Coincidence values for key length 8}
+\end{table}
+
+All column IC values are close to 0.065 (typical for English text), confirming that:
+\begin{enumerate}
+    \item The key length is indeed 8
+    \item Each column represents a monoalphabetic substitution (Caesar cipher)
+    \item The cipher uses a repeating key pattern
+\end{enumerate}
+
+This evidence strongly suggests a \textbf{Vigenère cipher}, as it matches the characteristics:
+\begin{itemize}
+    \item Polyalphabetic (low overall IC)
+    \item Short repeating key (length 8)
+    \item Each key position applies a simple shift (Caesar cipher)
+    \item Columns show English-like letter frequencies when correctly aligned
+\end{itemize}
+
+\subsection{Key Recovery}
+
+\subsubsection{Frequency Analysis on Columns}
+
+Having identified the cipher as Vigenère with a key length of 8, we can treat each column as an independent Caesar cipher. For each column, we test all 26 possible shifts and identify which shift produces letter frequencies closest to English.
+
+We use the chi-squared statistic to measure how well the decrypted column matches English letter frequencies:
+
+\[
+\chi^2 = \sum_{i=A}^{Z} \frac{(O_i - E_i)^2}{E_i}
+\]
+
+where $O_i$ is the observed frequency and $E_i$ is the expected English frequency for letter $i$. The shift with the minimum $\chi^2$ value corresponds to the key character for that position.
+
+\subsubsection{Recovered Key}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{Position} & \textbf{Column Length} & \textbf{Recovered Shift} & \textbf{Key Character} & \textbf{Status} \\
+\hline
+1 & 509 & 8 & I & \checkmark \\
+2 & 508 & 13 & N & \checkmark \\
+3 & 508 & 21 & V & \checkmark \\
+4 & 508 & 4 & E & \checkmark \\
+5 & 508 & 13 & N & \checkmark \\
+6 & 508 & 19 & T & \checkmark \\
+7 & 508 & 14 & O & \checkmark \\
+8 & 508 & 17 & R & \checkmark \\
+\hline
+\end{tabular}
+\caption{Key recovery results for Vigenère cipher}
+\end{table}
+
+\textbf{Recovered Key:} \texttt{INVENTOR}
+
+\subsection{Verification and Decryption}
+
+\subsubsection{Decryption}
+
+Using the recovered key \texttt{INVENTOR}, we decrypt the ciphertext. The first 200 characters of the decrypted text:
+
+\medskip
+\noindent
+\begin{minipage}{\textwidth}
+\footnotesize\ttfamily
+\seqsplit{METHODSFORTHESOLUTIONOFRUNNINGKEYCIPHERSNOANINTRODUCTIONTOMETHODSFORTHESOLUTIONOFCIPHERSNOSYNOPTICTABLESFORTHESOLUTIONOFCIPHERSANDABIBLIOGRAPHYOFCIPHERLITERATURENOFORMULAEFORTHESOLUTIONOFGEOMETRICALTR}
+\end{minipage}
+\medskip
+
+\subsubsection{Verification}
+
+The decrypted text is readable English and discusses methods for the solution of running-key ciphers and related cryptanalytic literature. This confirms that:
+
+\begin{enumerate}
+    \item The cipher type identification was correct (Vigenère)
+    \item The key length determination was accurate (8 characters)
+    \item The key recovery was successful (\texttt{INVENTOR})
+    \item The decryption produces meaningful plaintext
+\end{enumerate}
+
+All eight key characters were recovered correctly through frequency analysis, and the decryption produces coherent English text. This provides strong evidence that the analysis was correct.
+
+\subsection{Results Summary}
+
+\begin{itemize}
+    \item \textbf{Ciphertext length:} 4065 characters
+    \item \textbf{Index of Coincidence:} 0.0429 (indicated polyalphabetic cipher)
+    \item \textbf{Estimated key length (Friedman):} 5.5
+    \item \textbf{Key length candidates (Kasiski):} 8 (confirmed)
+    \item \textbf{Column IC verification:} All columns $\approx$ 0.065 (confirmed key length and cipher type)
+    \item \textbf{Identified cipher:} Vigenère
+    \item \textbf{Recovered key:} \texttt{INVENTOR}
+    \item \textbf{Verification:} All 8 key characters recovered correctly; decryption produces readable English
+\end{itemize}
+
+\newpage
+\section{Cryptanalysis of Substitution Cipher (Cipher2)}
+
+\subsection{Initial Observations}
+
+The ciphertext consists of 4006 uppercase alphabetic characters with no spaces or punctuation. The formatting is consistent with classical substitution ciphers and provides enough text for reliable statistical analysis.
+
+\subsection{Determining the Cipher Type}
+
+\subsubsection{Index of Coincidence Analysis}
+
+The Index of Coincidence (IC) for the ciphertext was computed to determine whether the cipher is monoalphabetic or polyalphabetic.
+
+\textbf{Result:} IC = \textbf{0.0701}
+
+This value is close to the English benchmark ($\approx 0.065$), which strongly indicates a \textbf{monoalphabetic substitution cipher}. This is notably higher than the IC observed for Cipher1 and well above the random-text baseline ($\approx 0.038$).
+
+\subsubsection{Frequency Analysis}
+
+We perform a simple frequency count to identify the most common ciphertext letters. The top 10 letters were:
+
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Letter} & \textbf{Count} \\
+\hline
+Z & 602 \\
+E & 406 \\
+X & 300 \\
+W & 281 \\
+V & 256 \\
+F & 254 \\
+T & 253 \\
+M & 246 \\
+K & 235 \\
+U & 197 \\
+\hline
+\end{tabular}
+\end{center}
+
+The skewed distribution is characteristic of monoalphabetic substitution, and supports the IC-based conclusion.
+
+\subsection{Recovering the Substitution Key}
+
+Since simple frequency matching alone is insufficient to resolve the full substitution, we use a statistical scoring method based on English quadgrams. A quadgram model is built from the known English plaintext of Cipher1 (which is long enough to serve as a language model). Each candidate key is scored by the sum of log-probabilities of the decrypted quadgrams (higher is better).
+
+To search the key space, we use a hill-climbing procedure with random restarts:
+\begin{enumerate}
+    \item Start from a frequency-based key guess and several random keys.
+    \item At each step, swap two letters in the key to form a new candidate.
+    \item Decrypt with the candidate key and compute its quadgram score.
+    \item Accept the swap if the score improves; otherwise accept it with a small probability (simulated annealing) to escape local maxima.
+    \item Keep the best key found, then refine it with additional iterations on the full ciphertext.
+\end{enumerate}
+
+\subsubsection{Recovered Key Mapping}
+
+The recovered substitution key maps ciphertext letters to plaintext letters as:
+
+\begin{center}
+\texttt{ABCDEFGHIJKLMNOPQRSTUVWXYZ} \\
+\texttt{UYXWTSPJBVHMRGDZKFCOLINAQE}
+\end{center}
+
+\subsection{Decryption and Verification}
+
+Using the recovered key, the ciphertext decrypts into readable English text. The first 200 characters are:
+
+\medskip
+\noindent
+\begin{minipage}{\textwidth}
+\footnotesize\ttfamily
+\seqsplit{OFTENHOWEVERWHEREONECLUEISMISSINGTHEREWILLBEANOTHERPRESENTTOTAKEITSPLACEREPEATEDTRIGRAMSARELESSLIKELYTHANREPEATEDDIGRAMSTOBEACCIDENTALANDLONGERREPEATEDSEQUENCESARESTILLLESSLIKELYTOBESOINTHEPRESENTTABU}
+\end{minipage}
+\medskip
+
+The plaintext discusses cryptanalytic reasoning about repeated n-grams and period detection. It reads as clear English and confirms that the substitution was solved correctly.
+
+\subsection{Results Summary}
+
+\begin{itemize}
+    \item \textbf{Ciphertext length:} 4006 characters
+    \item \textbf{Index of Coincidence:} 0.0701 (indicated monoalphabetic substitution)
+    \item \textbf{Identified cipher:} Simple substitution
+    \item \textbf{Recovered key mapping:} \newline
+    \texttt{\seqsplit{ABCDEFGHIJKLMNOPQRSTUVWXYZ}} \newline
+    \texttt{\seqsplit{UYXWTSPJBVHMRGDZKFCOLINAQE}}
+    \item \textbf{Verification:} Decrypted plaintext is coherent English
+\end{itemize}
+
+\newpage
+\section{Conclusions}
+
+The ciphertexts were successfully broken using classical cryptanalytic techniques. Cipher1 was identified as a polyalphabetic cipher (Vigenère) with key length 8; the key \texttt{INVENTOR} was recovered through Kasiski examination and frequency analysis on columns. Cipher2 was identified as a monoalphabetic substitution cipher based on its high Index of Coincidence and was solved using frequency analysis and quadgram-scored hill-climbing.
+
+The Index of Coincidence values provided an effective first discriminator: 0.0429 for Cipher1 (polyalphabetic) and 0.0701 for Cipher2 (monoalphabetic). These methods demonstrate that classical ciphers, while historically significant, are vulnerable to statistical cryptanalysis and should not be used for modern secure communication.
+
+\end{document}
