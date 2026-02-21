@@ -61,14 +61,14 @@
 
 \section{Assignment 1: Mini Garbled Circuit}
 
-This assignment implements a minimal garbled NAND gate following Yao's Garbled Circuits construction. The implementation generates random wire labels, constructs a garbled gate table, and evaluates it to compute the NAND function without revealing input or output values.
+This assignment builds a tiny garbled circuit for a single NAND gate using Yao's construction. The code creates random wire labels, garbles the gate into a small garbled table, and then evaluates the table to compute NAND without exposing the underlying bits.
 
 \subsection{Implementation Overview}
 
-The implementation consists of three main components:
+There are three moving pieces:
 
 \begin{enumerate}
-    \item \textbf{Wire Labels:} Each wire $w \in \{x, y, z\}$ has two random 128-bit labels representing 0 and 1:
+    \item \textbf{Wire Labels:} Each wire $w \in \{x, y, z\}$ gets two fresh 128-bit labels, one for 0 and one for 1:
 \begin{lstlisting}
 pub struct WireLabels {
     pub zero: WireLabel,  // L_w^0
@@ -85,7 +85,7 @@ impl WireLabels {
 }
 \end{lstlisting}
 
-    \item \textbf{Garbling:} The garbler constructs the gate by encrypting output labels for all input combinations:
+    \item \textbf{Garbling:} The garbler encrypts the correct output label for every input pair:
 \begin{lstlisting}
 // Build the 4 ciphertexts C[a,b] = Enc(K[a,b], L^{a NAND b}_z)
 for (a, b) in &[(0u8, 0u8), (0, 1), (1, 0), (1, 1)] {
@@ -102,7 +102,7 @@ for (a, b) in &[(0u8, 0u8), (0, 1), (1, 0), (1, 1)] {
 fastrand::shuffle(&mut table);  // Randomize order
 \end{lstlisting}
 
-    \item \textbf{Evaluation:} The evaluator decrypts all ciphertexts until finding the valid output:
+    \item \textbf{Evaluation:} The evaluator tries to decrypt each entry until one yields a valid output label:
 \begin{lstlisting}
 pub fn evaluate(&self, inputs: GarbledNandInputs) -> GarbledNandOutput {
     for c in &self.table {  // Try all 4 ciphertexts
@@ -120,12 +120,12 @@ pub fn evaluate(&self, inputs: GarbledNandInputs) -> GarbledNandOutput {
 
 \subsection{(a) Correctness: Why Exactly One Ciphertext Decrypts Correctly}
 
-During evaluation, the evaluator receives one label for wire $x$ (denoted $L_x^a$ where $a \in \{0,1\}$) and one label for wire $y$ (denoted $L_y^b$ where $b \in \{0,1\}$). The evaluator then attempts to decrypt all four ciphertexts in the garbled table using the derived key $K = \text{KDF}(L_x^a || L_y^b)$.
+At evaluation time, the evaluator holds one label for $x$ ($L_x^a$) and one for $y$ ($L_y^b$), with $a,b \in \{0,1\}$. From those two labels the evaluator derives a single key $K = \text{KDF}(L_x^a || L_y^b)$ and tries it against the four ciphertexts in the table.
 
-Exactly one ciphertext decrypts correctly because:
+Only one entry opens successfully, for these reasons:
 
 \begin{enumerate}
-    \item \textbf{The key derivation is deterministic:} For a given pair of input labels $(L_x^a, L_y^b)$, the key derivation function $\text{KDF}(L_x^a || L_y^b)$ always produces the same key $K[a,b]$. This is implemented as:
+    \item \textbf{Deterministic key derivation:} The same pair of input labels always maps to the same key $K[a,b]$. In the code this is:
 \begin{lstlisting}
 fn derive_key(x: &WireLabel, y: &WireLabel) -> [u8; 32] {
     let mut hasher = Sha256::new();
@@ -136,25 +136,25 @@ fn derive_key(x: &WireLabel, y: &WireLabel) -> [u8; 32] {
 }
 \end{lstlisting}
     
-    \item \textbf{Each ciphertext is encrypted with a unique key:} During garbling, for each input combination $(a,b) \in \{0,1\}^2$, a distinct key $K[a,b] = \text{KDF}(L_x^a || L_y^b)$ is derived. This key is used to encrypt the corresponding output label $L_z^{\text{NAND}(a,b)}$, producing ciphertext $C[a,b]$.
+    \item \textbf{Each table entry uses its own key:} During garbling we derive four keys, one per input pair, and encrypt the matching output label $L_z^{\text{NAND}(a,b)}$ under each key to form $C[a,b]$.
     
-    \item \textbf{Only the matching key decrypts correctly:} When the evaluator derives $K = \text{KDF}(L_x^a || L_y^b)$ from their input labels, this key matches exactly one of the four keys used during garbling---specifically, $K[a,b]$ where $(a,b)$ corresponds to the actual input values. Attempting to decrypt the other three ciphertexts with this key fails because they were encrypted with different keys ($K[0,0]$, $K[0,1]$, $K[1,0]$, or $K[1,1]$), resulting in random-looking decrypted values that do not match any valid output label.
+    \item \textbf{Only the matching key works:} The derived key matches exactly one of the four garbling keys. Decrypting the other three entries with the wrong key produces garbage that will not equal any valid output label.
     
-    \item \textbf{The output label is recognizable:} The garbler provides the two possible output labels $L_z^0$ and $L_z^1$. The evaluator can verify that exactly one decryption produces a label matching one of these two values, confirming correctness.
+    \item \textbf{Valid labels are recognizable:} The evaluator knows both possible output labels $L_z^0$ and $L_z^1$, so they can spot the one correct decryption.
 \end{enumerate}
 
-Therefore, the cryptographic properties of the key derivation function and encryption scheme ensure that only the ciphertext corresponding to the actual input combination $(a,b)$ decrypts to a valid output label, while all other decryption attempts produce invalid values.
+So the cryptographic setup guarantees that exactly the ciphertext corresponding to the true inputs $(a,b)$ yields a valid output label; all other attempts fail.
 
 \subsection{(b) Inefficiency: Why Four Decryptions Are Required}
 
-The evaluator must attempt to decrypt all four ciphertexts in the garbled table because:
+The evaluator has to try all four ciphertexts because:
 
 \begin{enumerate}
-    \item \textbf{The table order is randomized:} After garbling, the four ciphertexts $\{C[0,0], C[0,1], C[1,0], C[1,1]\}$ are stored in random order. This randomization prevents the evaluator from learning which ciphertext corresponds to which input combination, preserving privacy.
+    \item \textbf{The table is shuffled:} The four ciphertexts are stored in random order to hide which entry matches which input pair.
     
-    \item \textbf{The evaluator cannot identify the correct ciphertext a priori:} Without knowing which input combination $(a,b)$ their labels represent, the evaluator cannot determine which of the four ciphertexts is the correct one to decrypt. The only way to find the valid output is to try decrypting all entries.
+    \item \textbf{The evaluator cannot pick the right entry upfront:} The labels do not reveal the underlying bits, so there is no way to select the correct ciphertext without trying it.
     
-    \item \textbf{No early termination is possible:} Since the evaluator cannot distinguish valid from invalid decryptions until after attempting decryption, they must process all four entries. The first successful decryption (producing a label matching $L_z^0$ or $L_z^1$) indicates the correct output, but there is no way to know which entry will succeed without trying them all. This is evident in the evaluation code:
+    \item \textbf{Success is only visible after decryption:} The evaluator only discovers the valid label after decrypting, so all entries must be checked. The loop in the code makes this explicit:
 \begin{lstlisting}
 for c in &self.table {  // Must iterate through all 4 entries
     let k = derive_key(&inputs.x, &inputs.y);
@@ -168,6 +168,73 @@ for c in &self.table {  // Must iterate through all 4 entries
 \end{lstlisting}
 \end{enumerate}
 
-This inefficiency is inherent in this minimal construction. In optimized garbled circuit schemes, techniques such as point-and-permute or free-XOR can reduce the number of decryptions needed.
+This is a known limitation of the bare-bones construction. Optimizations such as point-and-permute or free-XOR can cut down the number of decryptions.
+
+\section{Assignment 2: Garbled Circuits in Practice}
+
+Here the goal is privacy-preserving array equality. Alice and Bob each have a private boolean array of length $n$ and want to learn only whether all positions match: $\bigwedge_i (a_i = b_i)$. The implementation provides two versions: a fully oblivious one and a faster early-exit (leaky) version that leaks limited information.
+
+\subsection{Implementation Overview}
+
+Both versions implement the same circuit. For each index $i$, equality $a_i = b_i$ is built as $(a_i \land b_i) \lor (\lnot a_i \land \lnot b_i)$ using NAND gates, and then all equalities are combined with an AND chain. The difference is in control flow: the oblivious version always runs through all $n$ indices, while the early-exit version stops at the first mismatch.
+
+\subsection{Threat Model}
+
+We assume semi-honest (honest-but-curious) adversaries. The protocol \textbf{protects}:
+\begin{itemize}
+    \item \textbf{Individual inputs:} Alice's array $A = (a_0, \ldots, a_{n-1})$ and Bob's array $B = (b_0, \ldots, b_{n-1})$ stay secret; only the final match/no-match bit is revealed.
+    \item \textbf{Intermediate values:} In the oblivious version, per-index equality results are never decoded, only the final AND output.
+\end{itemize}
+
+The protocol does \textit{not} protect against malicious parties who deviate from the protocol, nor does it address side channels (timing, power) beyond what is discussed below.
+
+\subsection{Leakage Analysis}
+
+\textbf{Oblivious version:} The oblivious implementation always processes all $n$ indices. Control flow is data-independent, so runtime is (to first order) independent of the input values. The only thing revealed is the final boolean output.
+
+\textbf{Early-exit (leaky) version:} The early-exit implementation stops as soon as it finds a mismatch. This creates \textbf{timing leakage}: anyone who can measure runtime can infer the \textit{index of the first mismatch}. Formally, the leakage function is:
+\[
+\mathcal{L}(A, B) = \min\{i : a_i \neq b_i\}
+\]
+with the convention that if $A = B$, the leakage is $n$. From the runtime, an adversary learns how many indices were checked before the mismatch.
+
+\subsection{Trade-off Discussion}
+
+The early-exit (leaky) version intentionally reveals the index of the first mismatch in exchange for performance. The oblivious version must always build and evaluate the full AND chain over all $n$ equality results; the early-exit version skips that work by decoding each equality as it goes and returning as soon as one fails. This makes runtime depend on how far the arrays match before they diverge, which is exactly the timing leakage described above. The trade-off is explicit: sacrifice index privacy for faster execution when mismatches occur early, which can matter in settings where arrays often differ near the start (for example, version hashes, checksums, or incremental comparisons).
+
+\textbf{When the additional leakage may be acceptable:}
+\begin{itemize}
+    \item \textbf{Non-adversarial settings:} Both parties are trusted and efficiency matters (for example, internal checks or debugging).
+    \item \textbf{Index is non-sensitive:} The location of the mismatch is not confidential (for example, version comparisons where the value matters more than the position).
+    \item \textbf{Controlled environments:} Timing channels are mitigated with constant-time code or padded delays.
+\end{itemize}
+
+\textbf{When the leakage is unacceptable:}
+\begin{itemize}
+    \item \textbf{Privacy-critical applications:} The index itself is sensitive (for example, which digit differs in a password, or the position of a matching record in a database).
+    \item \textbf{Adversarial settings:} One party may be compromised and timing measurements are feasible.
+    \item \textbf{Regulatory compliance:} Strict privacy guarantees are required (no auxiliary leakage).
+\end{itemize}
+
+\subsection{Performance Evaluation}
+
+Both versions were benchmarked for $n \in \{4, 8, 16\}$ with all elements equal (worst case for the early-exit version, since it has to check everything). Results are from a single run in debug mode:
+
+\begin{center}
+\begin{tabular}{lrr}
+\hline
+$n$ & Oblivious (s) & Leaky (s) \\
+\hline
+4  & 0.0017 & 0.0014 \\
+8  & 0.0032 & 0.0027 \\
+16 & 0.0065 & 0.0064 \\
+\hline
+\end{tabular}
+\end{center}
+
+The oblivious version is slower because it builds and evaluates the full AND chain over all equalities. The early-exit version avoids that chain by decoding each equality and returning early. For arrays with an early mismatch, the speedup would be larger (for example, a mismatch at index 0 means minimal work). Both versions scale roughly linearly with $n$, as expected from the circuit size.
+
+\vspace{1em}
+\noindent\textit{Note:} The \texttt{README.md} in the \texttt{smpc} directory contains instructions to build and run the code.
 
 \end{document}

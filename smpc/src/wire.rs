@@ -1,7 +1,7 @@
 use rand::RngCore;
 
 /// Security parameter k (bits) for wire labels.
-pub const LABEL_BITS: usize = 128; // 128 is secure enough not to brute force it
+pub const LABEL_BITS: usize = 128;
 pub const LABEL_BYTES: usize = LABEL_BITS / 8;
 
 /// A label for a single Boolean value on a wire.

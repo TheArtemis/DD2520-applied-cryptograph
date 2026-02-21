@@ -16,7 +16,7 @@ pub struct GarbledNandOutput {
 /// A single garbled **NAND** gate with fixed input/output labels.
 ///
 /// Logical (non-garbled) NAND gate:
-/// - Inputs: bits `x, y ∈ {0,1}`
+/// - Inputs: bits `x, y` in {0,1}
 /// - Output: `z = NAND(x, y) = 1 - (x & y)`
 /// - Truth table:
 ///   - (x, y) = (0, 0) → z = 1
@@ -25,9 +25,9 @@ pub struct GarbledNandOutput {
 ///   - (x, y) = (1, 1) → z = 0
 ///
 /// Garbled representation in this struct:
-/// - For each wire `w ∈ {x, y, z}`:
-///   - Two random labels `L_w^0, L_w^1 ∈ {0,1}^k` encode the bits 0 and 1.
-/// - For each input pair `(a, b) ∈ {0,1}²`:
+/// - For each wire `w` in {x, y, z}:
+///   - Two random labels L_w^0, L_w^1 encode the bits 0 and 1.
+/// - For each input pair (a, b) in {0,1}^2:
 ///   - Derive a key `K[a,b] = KDF(L_x^a || L_y^b)`.
 ///   - Encrypt the correct output label `L_z^{NAND(a,b)}` into a ciphertext `C[a,b]`.
 /// - The garbled table `table` stores the 4 ciphertexts `{C[0,0], C[0,1], C[1,0], C[1,1]}`
@@ -53,31 +53,22 @@ impl GarbledNandGate {
         let y_labels = WireLabels::random(&mut rng);
         let z_labels = WireLabels::random(&mut rng);
 
-        // Build the 4 ciphertexts C[a,b] = Enc(K[a,b], L^{a NAND b}_z)
-        // for all input combinations (a, b) ∈ {(0,0), (0,1), (1,0), (1,1)}.
         let mut table = Vec::with_capacity(4);
         for (a, b) in &[(0u8, 0u8), (0, 1), (1, 0), (1, 1)] {
-            // Pick the labels corresponding to the *bit values* a and b.
             let in_x = if *a == 0 { &x_labels.zero } else { &x_labels.one };
             let in_y = if *b == 0 { &y_labels.zero } else { &y_labels.one };
-
-            // Compute the logical NAND output for these bits.
             let nand_result = if *a == 1 && *b == 1 { 0 } else { 1 };
-
-            // Pick the output label for that logical result.
             let out_z = if nand_result == 0 {
                 &z_labels.zero
             } else {
                 &z_labels.one
             };
 
-            // Derive the key and encrypt the chosen output label.
             let k = derive_key(in_x, in_y);
             let c = encrypt_label(&k, out_z);
             table.push(c);
         }
 
-        // Randomize ordering.
         fastrand::shuffle(&mut table);
 
         Self {
@@ -86,6 +77,37 @@ impl GarbledNandGate {
             z_labels,
             table,
         }
+    }
+
+    /// Construct a garbled NAND gate with specified wire labels.
+    /// Used for circuit construction where wires must share labels across gates.
+    pub fn new_with_labels(
+        x_labels: WireLabels,
+        y_labels: WireLabels,
+        z_labels: WireLabels,
+    ) -> Self {
+        let table = Self::build_table(&x_labels, &y_labels, &z_labels);
+        Self {
+            x_labels,
+            y_labels,
+            z_labels,
+            table,
+        }
+    }
+
+    fn build_table(x_labels: &WireLabels, y_labels: &WireLabels, z_labels: &WireLabels) -> Vec<[u8; 32]> {
+        let mut table = Vec::with_capacity(4);
+        for (a, b) in &[(0u8, 0u8), (0, 1), (1, 0), (1, 1)] {
+            let in_x = if *a == 0 { &x_labels.zero } else { &x_labels.one };
+            let in_y = if *b == 0 { &y_labels.zero } else { &y_labels.one };
+            let nand_result = if *a == 1 && *b == 1 { 0 } else { 1 };
+            let out_z = if nand_result == 0 { &z_labels.zero } else { &z_labels.one };
+            let k = derive_key(in_x, in_y);
+            let c = encrypt_label(&k, out_z);
+            table.push(c);
+        }
+        fastrand::shuffle(&mut table);
+        table
     }
 
     /// Evaluate the garbled NAND gate on given input labels.
@@ -144,8 +166,6 @@ impl GarbledNandGate {
     }
 }
 
-// --- Internal helpers: naive KDF and "encryption" ---
-
 fn derive_key(x: &WireLabel, y: &WireLabel) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(&x.0);
@@ -157,7 +177,7 @@ fn derive_key(x: &WireLabel, y: &WireLabel) -> [u8; 32] {
 }
 
 fn encrypt_label(key: &[u8; 32], label: &WireLabel) -> [u8; 32] {
-    // Simple XOR-based "encryption": C = H(key) XOR padded(label).
+    // XOR with H(key) as keystream
     let mut hasher = Sha256::new();
     hasher.update(key);
     let keystream = hasher.finalize();

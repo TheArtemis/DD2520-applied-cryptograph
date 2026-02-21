@@ -1,37 +1,68 @@
-use crate::composite::garbled_equality;
-use crate::composite::garbled_and;
+use crate::composite::{garbled_and, garbled_equality};
 use crate::gate::GarbledNandGate;
 use crate::wire::{WireLabel, WireLabels};
+use rand::thread_rng;
 
 /// Fully Oblivious Implementation
-/// Computes ∧(a_i == b_i) for all i, always processing all elements
+/// Computes AND_i (a_i == b_i), always processing all elements
 /// Runtime is independent of input values
 pub fn array_equality(
-    gates: &[GarbledNandGate],
+    alice_labels: &[WireLabels],
+    bob_labels: &[WireLabels],
     alice_inputs: &[WireLabel],
     bob_inputs: &[WireLabel],
-    _output_labels: &WireLabels,
+    final_output_labels: &WireLabels,
 ) -> WireLabel {
     assert_eq!(alice_inputs.len(), bob_inputs.len());
-    // Need enough gates: ~8 gates per equality + gates for AND chain
-    assert!(gates.len() >= alice_inputs.len() * 10);
-    
-    let mut gate_idx = 0;
-    
-    // Compute equality for each index - always process ALL elements
+    assert_eq!(alice_inputs.len(), alice_labels.len());
+    assert_eq!(alice_inputs.len(), bob_labels.len());
+
     let mut equality_results = Vec::new();
+    let mut equality_output_labels = Vec::new();
     for i in 0..alice_inputs.len() {
-        let eq = garbled_equality(gates, &mut gate_idx, &alice_inputs[i], &bob_inputs[i]);
+        let (eq, eq_labels) = garbled_equality(
+            &alice_labels[i],
+            &bob_labels[i],
+            &alice_inputs[i],
+            &bob_inputs[i],
+        );
         equality_results.push(eq);
+        equality_output_labels.push(eq_labels);
     }
-    
-    // Conjunct all equality results: result[0] AND result[1] AND ... AND result[n-1]
-    // Always processes all results, regardless of intermediate values
-    let mut result = equality_results[0].clone();
+
+    if equality_results.len() == 1 {
+        let eq_label = &equality_results[0];
+        let eq_labels = &equality_output_labels[0];
+        if *eq_label == eq_labels.one {
+            return final_output_labels.one.clone();
+        } else {
+            return final_output_labels.zero.clone();
+        }
+    }
+
+    let mut rng = thread_rng();
+    let mut accum_label = equality_results[0].clone();
+    let mut accum_labels = equality_output_labels[0].clone();
     for i in 1..equality_results.len() {
-        result = garbled_and(&gates[gate_idx], &result, &equality_results[i]);
-        gate_idx += 1;
+        let nand_labels = WireLabels::random(&mut rng);
+        let and_labels = if i == equality_results.len() - 1 {
+            final_output_labels.clone()
+        } else {
+            WireLabels::random(&mut rng)
+        };
+        let nand_gate = GarbledNandGate::new_with_labels(
+            accum_labels.clone(),
+            equality_output_labels[i].clone(),
+            nand_labels.clone(),
+        );
+        let not_gate = GarbledNandGate::new_with_labels(
+            nand_labels.clone(),
+            nand_labels.clone(),
+            and_labels.clone(),
+        );
+        accum_label = garbled_and(&nand_gate, &not_gate, &accum_label, &equality_results[i]);
+        accum_labels = and_labels;
     }
-    
-    result
+
+    accum_label
 }
