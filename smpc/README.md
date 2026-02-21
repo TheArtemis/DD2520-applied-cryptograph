@@ -22,8 +22,8 @@ It mainly points you to the tests. To actually run them:
 cargo test
 ```
 
-Use `cargo test assignment1` for the garbled NAND tests and `cargo test assignment2` for the array equality stuff. Add `-- --nocapture` to the assignment2 tests if you want to see the performance numbers printed:
+Use `cargo test --test assignment1` for the garbled NAND tests and `cargo test --test assignment2` for the array equality stuff. Add `-- --nocapture` to the assignment2 tests if you want to see the performance numbers printed:
 
 ```bash
-cargo test assignment2 -- --nocapture
+cargo test --test assignment2 -- --nocapture
 ```
