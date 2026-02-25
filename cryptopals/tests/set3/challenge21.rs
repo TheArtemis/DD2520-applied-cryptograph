@@ -17,3 +17,10 @@ fn test_mt19937_basic_properties() {
     assert_ne!(a, b);
 }
 
+/// Verify first output for seed 5489 matches reference (MT19937 reference implementation).
+#[test]
+fn test_mt19937_seed_5489_first_output() {
+    let first = Mt19937::new(5489).next_u32();
+    assert_eq!(first, 3499211612, "first output for seed 5489 must match reference");
+}
+
