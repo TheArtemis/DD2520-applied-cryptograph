@@ -1,0 +1,247 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue,bookmarks=true,bookmarksnumbered=true,unicode]{hyperref}
+
+\title{Cryptographic Protocol Design for Sweden Effect Tariff Smart Grid}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{System Assumptions}
+
+Our setup relies on three main parts: a power meter, a home controller, and a bunch of smart devices.
+
+\textbf{Power meter.} The electricity provider installs this tamper-resistant device. It has a reliable power source and decent processing power. The provider trusts it completely, and it talks to the local controller using short-range wireless. There is a separate secure channel back to the provider, but we aren't focusing on that here. Its main job is to report the home's power consumption and peak usage.
+
+\textbf{Controller.} Think of this as the brain of the house, similar to a Raspberry Pi. It has stable power, persistent storage, and connects wirelessly. The household trusts it, but the electricity provider doesn't. It handles all the central coordination and enforces scheduling decisions. Everything connects to it in a star topology. We assume it doesn't necessarily have a constant internet connection.
+
+\textbf{Smart devices.} These are constrained IoT nodes like light bulbs, EV chargers, or dishwashers. They don't have a lot of CPU power, memory, or radio bandwidth. Some run on batteries while others plug into the wall. They all use short-range wireless like Zigbee or BLE to communicate. We assume the physical layer offers absolutely no confidentiality.
+
+All local communication happens wirelessly within the normal range of a standard home.
+
+\section{User Assumptions}
+
+We assume the main user is the homeowner.
+
+Their main goal is to cut down on electricity costs without having to manage things manually all the time. The system needs to run automatically while keeping the home safe and comfortable.
+
+We treat the user as honest but curious. They might poke around and look at the network traffic, but they aren't going to actively try to break their own setup. They have physical access to everything and can easily add, remove, or override devices.
+
+Since we can't expect users to be cryptography experts, the pairing process has to be straightforward. We can't expose them to raw keys or confusing algorithm details.
+
+\section{Adversary Assumptions}
+
+We consider two main types of attackers.
+
+\textbf{External adversary.} This is an attacker within radio range who has Dolev-Yao capabilities. That means they can eavesdrop, replay, modify, or inject messages. We assume they have unlimited computing power, but they can't physically break into the trusted hardware. They might want to profile the household's behavior by looking at power data, spoof controller commands to cause power spikes, or jam the radio to cause a denial of service. They might also try to pair a fake device to the network.
+
+\textbf{Insider adversary.} This is a legitimate smart device that got compromised but still holds valid credentials. It might start sending fake power readings or just ignore commands. This usually happens through firmware hacking or supply chain attacks.
+
+We aren't worrying about nation-state attackers trying to pull off advanced hardware extraction or side-channel attacks on the controller. That is out of scope.
+
+\section{Security and Functional Requirements}
+
+Given the threats mentioned above, our protocol has to cover a few key bases.
+
+\textbf{Mutual authentication.} Devices need to prove they are legitimate to the controller, and the controller must do the same for the devices. This is a big deal because a fake command like a random suspend or shutting down the heating in the middle of a Swedish winter is obviously dangerous.
+
+\textbf{Integrity.} We need to ensure reports and commands haven't been tampered with. Otherwise, a hacked device could send fake consumption data to mess up the power scheduling.
+
+\textbf{Confidentiality.} Power usage shows exactly what people are doing at home. Protecting this data is a major privacy issue under GDPR, not just a security checklist item.
+
+\textbf{Freshness and replay protection.} We can't let an attacker just record and replay an old reduce power command to cause chaos, or replay a low power reading to trick the controller.
+
+\textbf{Authorization.} Only the controller is allowed to issue commands, and only properly registered devices can send reports. Devices shouldn't be allowed to boss each other around.
+
+\textbf{What we deprioritize.} We don't really care about non-repudiation here since this is home automation, not a legal audit trail. Perfect forward secrecy would be nice, but it is a bit too heavy for the smallest battery-powered devices. We note this as a trade-off later on.
+
+\textbf{Performance constraints.} These tiny devices have hard limits. We prefer symmetric crypto for the daily traffic and only use asymmetric math during the initial setup. Commands need to happen in near real-time, generally under 1 to 2 seconds, so heavy handshakes for every single message are a no-go. We also need to keep message sizes small because wireless frames don't have much room. AES-128 running in hardware is great, but doing RSA calculations for every packet would kill the battery instantly.
+
+\section{Architecture}
+
+We use a star topology with the controller acting as the central hub.
+
+There are three main subprotocols:
+\begin{enumerate}
+    \item Device registration for one-time pairing
+    \item Periodic power reporting
+    \item Command dispatch
+\end{enumerate}
+
+Each device gets its own unique symmetric key shared with the controller. We avoid broadcast keys completely, so if one device gets hacked, the rest of the network stays safe.
+
+\subsection*{Subprotocol 1: Device Registration}
+
+Pairing starts when someone physically presses a button on both the controller and the device.
+
+\begin{verbatim}
+Device                                                          Controller
+  |                                                                  |
+  | -- Device_ID, capabilities, ECDH_pub_D ------------------------->|
+  | <---- ECDH_pub_C, Sign(ECDH_pub_C) ----------------------------- |
+  |   [Both derive K_dc = HKDF(ECDH_secret, ECDH_pub_C, ECDH_pub_D)] |
+  | <--- {Device_ID, counter_init=0}_{K_dc} ------------------------ |
+\end{verbatim}
+
+The controller signs its ECDH public key. The device checks this signature to make sure it is talking to the real controller before deriving the shared symmetric key.
+
+\subsection*{Subprotocol 2: Power Reporting}
+
+Devices send their encrypted power usage at regular intervals.
+
+\begin{verbatim}
+Device                                        Controller
+  | -- {Device_ID | power_W | counter}_{K_dc} ---> |
+\end{verbatim}
+
+We use AES-128-GCM to keep things confidential and verify integrity. The controller checks the authentication tag and makes sure the counter is always going up.
+
+\subsection*{Subprotocol 3: Command Dispatch}
+
+\begin{verbatim}
+Controller                                    Device
+  | -- {Device_ID | cmd | params | counter}_{K_dc} ---> |
+  | <--- {Device_ID | ACK | counter+1}_{K_dc} --------- |
+\end{verbatim}
+
+The device checks that the command actually came from the controller before doing anything.
+
+\section{Data at Rest}\label{sec:dataatrest}
+
+The controller is the only piece of hardware with persistent storage that we really need to lock down. The smart devices only need to hold onto their shared key and a message counter.
+
+\textbf{On the controller:} The individual device keys are highly sensitive. If an attacker grabs them, they can spoof anything on the network. The controller's own elliptic curve private key is also a massive target since stealing it lets someone impersonate the hub to new devices. We also have to protect the power history logs because they reveal sensitive household routines. To keep things safe, the EC private key is encrypted on disk using a key derived from Argon2id, as mentioned in Section \ref{sec:algorithms}. The device keys sit in protected files with strict operating system permissions. The power logs are also encrypted at rest to stay compliant with GDPR.
+
+\textbf{On smart devices:} These only need to keep their shared key and the counter safe across reboots. A lot of these constrained devices don't have fancy secure enclaves. Since we assume they are reasonably tamper-resistant, we just store the keys in non-volatile memory without an extra encryption layer.
+
+\section{Data in Transit}
+
+All three message flows are protected in transit.
+
+\textbf{Registration messages} carry the public ECDH keys and the controller's signature. We don't strictly need to hide the public keys, but the device ID is encrypted once the shared key is set up so passive listeners can't fingerprint the hardware.
+
+\textbf{Power reports} hold private behavioral data, like exactly how many watts the house is pulling, so they have to be encrypted. The GCM tag ensures nobody messed with the data, and the counter proves the message is fresh.
+
+\textbf{Commands} absolutely need authentication because a rogue controller is dangerous. They also need encryption to hide which devices are turning on and off, preventing attackers from figuring out the homeowner's schedule. The counter blocks replay attacks.
+
+Everything in transit relies on AES-128-GCM. It handles confidentiality and integrity in a single pass, which is a lifesaver for constrained hardware. Every message uses a constantly increasing counter as the nonce, stopping replay attacks dead in their tracks without needing extra round trips. Counters are saved so they don't reset if a device reboots. Since we don't use broadcast messages, all traffic is strictly unicast between the controller and the endpoint, meaning we don't have to deal with the nightmare of group key management. Getting data back to the utility company is out of scope, though something like TLS over the internet would work just fine.
+
+\section{Cryptographic Algorithms}\label{sec:algorithms}
+
+We need crypto for four main things: setting up keys, encrypting data securely, deriving keys, and digital signatures.
+
+\textbf{Key establishment:} We use ECDH over Curve25519 during pairing. We went with Curve25519 because it is fast, avoids patent headaches, and works great on low-power devices. It is much lighter than RSA or classic Diffie-Hellman.
+
+\textbf{Authenticated encryption:} AES-128-GCM is used for all daily traffic. GCM gives us confidentiality and integrity at the same time. A 128-bit key is plenty secure against normal attackers and usually benefits from hardware acceleration on modern IoT chips.
+
+\textbf{Key derivation:} We use HKDF based on HMAC-SHA256 to derive the shared key from the raw ECDH secret. We mix in the device ID and controller ID to make sure keys aren't accidentally reused across different devices.
+
+\textbf{Signing:} Ed25519 handles the controller's signature during pairing. It uses the same curve family as Curve25519, verifies super fast, and keeps signatures small at just 64 bytes.
+
+\textbf{Key protection at rest:} We use Argon2id to derive the wrapping key that protects the controller's private key. It is memory-hard and password-based. We recommend tuning it to at least 64 MiB of memory, 3 iterations, and parallelism that matches the controller's CPU.
+
+We are completely avoiding RSA because it's too slow for IoT. We also stay away from deprecated stuff like SHA-1 and MD5, and we skip CBC mode to avoid padding oracles. Custom crypto is obviously a bad idea and not used here.
+
+\section{Implementation}
+
+Rolling our own crypto is a terrible idea, so picking the right libraries is essential. On the controller side, which runs Linux or something similar, we use \textbf{libsodium}. It gives us really safe, high-level APIs for the Curve25519 exchange, Ed25519 signing, AES-GCM, and HKDF. It also manages nonces nicely and keeps us from making dumb mistakes. For the bare-metal smart devices, we rely on \textbf{wolfCrypt}, which is part of wolfSSL. It supports all the math we need but runs in a tiny memory footprint, usually around 20 KB, and hooks right into hardware AES accelerators. We avoid OpenSSL on the edge devices because it is simply too massive and complex, though it is fine as a fallback on the controller. Whenever we finish using key material, we immediately zero it out of memory using the library's secure wipe functions.
+
+\section{Parameters}
+
+\begin{itemize}
+    \item Curve25519 and Ed25519 give us roughly 128 bits of security.
+    \item AES-GCM uses 128-bit keys alongside 128-bit authentication tags.
+    \item Nonces are generated from strict 64-bit per-device counters.
+\end{itemize}
+
+Even if a device sends a message every 30 seconds for 10 years, we won't come close to hitting the cryptographic limits. We just recommend periodic re-keying long before theoretical exhaustion is an issue.
+
+\section{Randomness}
+
+We really only need true randomness when generating the initial ECDH keys.
+
+For the daily messages, we use deterministic counters for the nonces so we don't have to rely on cheap hardware entropy.
+
+The controller just uses the secure random source provided by its operating system. The smart devices need to pull from hardware TRNGs if they have them, and they absolutely cannot use factory-cloned deterministic keys.
+
+\section{Trade-offs and Risks}\label{sec:tradeoffs}
+
+Here is a quick look at the main trade-offs we had to make.
+
+\textbf{Security versus constrained resources.} We pushed AES-128-GCM and Curve25519 because they are as lightweight as we can get without sacrificing real security. Dropping down to 80-bit security or turning off authentication would be a huge mistake. We accept that pairing might take a little longer on the absolute cheapest smart bulbs due to the ECDH math.
+
+\textbf{Privacy versus utility.} The controller has to see all power readings in plain text to actually do its job and schedule things. It can't schedule power usage on encrypted gibberish. Because of this, a hacked controller basically leaks the entire household routine. We accept this as unavoidable for the system to function, but we mitigate it by encrypting the storage and throwing away old data.
+
+\textbf{Forward secrecy versus complexity.} Getting true forward secrecy means running an ephemeral key exchange every single time a device connects. That is way too heavy for tiny devices. We use long-term shared keys instead. If a device is compromised, an attacker can decrypt any past traffic they managed to record. We handle this by automatically re-keying the system once a year or during firmware updates.
+
+\textbf{Usability versus security at pairing.} Forcing the user to physically press a button on both devices to pair them stops remote attackers from adding rogue hardware. It is slightly annoying for a user setting up 10 to 20 devices, but the massive security benefit makes it worth it.
+
+\textbf{Availability versus security.} Anyone with a cheap jammer can knock out the wireless channel, and cryptography cannot stop radio interference. We just accept this as a physical reality. Our main defense is failing safely. If a device loses contact with the controller, it just drops back to a safe default state.
+
+\section{Legal Considerations}
+
+Several layers of EU and Swedish law apply directly to this project.
+
+\textbf{GDPR and the Swedish Dataskyddslagen.} Power consumption is deeply personal data. It shows exactly when you sleep, cook, or leave for work. In this setup, the controller acts as the data controller under GDPR, while the utility provider is a separate entity. Sweden's privacy authority, IMY, is pretty strict about enforcement. We handle this by applying data minimization, meaning we only collect exactly what is needed. We also strictly limit the purpose of the data to scheduling, not profiling, and avoid storing raw readings forever.
+
+\textbf{RED Delegated Regulation (EU) 2022/30.} Since August 2025, any wireless IoT device sold in the EU has to meet mandatory cybersecurity rules to get a CE mark. Because our smart devices communicate wirelessly, they fall right under this. Our use of authentication and encryption directly checks these compliance boxes.
+
+\textbf{EU Cyber Resilience Act (CRA).} The CRA starts applying in December 2027, which lines up with a normal launch window for a project like this. It forces manufacturers to handle cybersecurity throughout the entire lifecycle of the product, including secure design and vulnerability patching. Relying on heavily audited libraries and sticking to our re-keying policy keeps us in line with these incoming rules.
+
+\textbf{NIS2 and Sweden's Cybersäkerhetslagen.} Sweden's Cybersäkerhetslagen came into effect recently in January 2026, implementing NIS2 for critical infrastructure like the energy sector. Utility providers running this network will likely fall under its scope, meaning they have mandatory incident reporting and security obligations to agencies like NCSC-SE.
+
+\section{Usability Considerations}
+
+\textbf{Pairing.} Having to press a physical button is slightly annoying, but it's a one-time thing. Feedback like an LED or beep needs to clearly confirm success. A silent failure is a huge security risk if the user just assumes the pairing worked.
+
+\textbf{Key compromise and device replacement.} Hardware breaks. When a user swaps out a broken smart plug, the new one has to be paired, and the old key needs to be wiped from the controller. This has to be dead simple for a non-technical user, ideally just a remove button in a smartphone app.
+
+\textbf{Re-keying.} The annual re-keying process has to happen quietly in the background without the user ever noticing or clicking anything.
+
+\textbf{Failure behavior.} If the controller goes offline, the devices shouldn't start flashing cryptographic error codes at the user. They just need to quietly drop back into a safe default mode.
+
+\textbf{No crypto exposure.} Users should never see key hashes, certificate warnings, or algorithm names. All the heavy math happens invisibly by design.
+
+\section{Non-Cryptographic Threats}
+
+There are some threats that crypto just can't fix.
+
+\textbf{Physical theft of the controller.} The controller holds all the device keys and its own private key. If someone steals it, the network is compromised. To slow them down, the private key is encrypted on disk using Argon2id as explained in Section \ref{sec:dataatrest}. They still need to crack the password. Ideally, the controller is locked away in a utility box.
+
+\textbf{Radio jamming and denial of service.} An attacker sitting in a car outside can easily jam the wireless frequency. Math won't stop a radio jammer. To deal with this, devices have to fail safely. They should just revert to a conservative baseline power state. We absolutely cannot let the system fail dangerously, like shutting off the heat during a winter freeze just because the radio dropped.
+
+\textbf{Supply chain compromise.} A shady factory could flash backdoored firmware or hardcode known keys into the devices before shipping. We get around this by never using factory keys. All real keys are derived fresh at pairing time via ECDH. Firmware also has to be locked down using Ed25519 signatures from the real manufacturer.
+
+\textbf{Firmware attacks and over-the-air updates.} If a smart bulb accepts any random firmware file, an attacker will just install malware. Every update needs to be signed by the manufacturer and verified on the device before writing to flash. We also use version counters to prevent attackers from rolling back to an older, vulnerable firmware version.
+
+\textbf{Physical device tampering.} Someone could steal a smart device from the porch and try to read the flash memory to extract the key. Since we strictly isolate keys per device, they only compromise that one specific gadget. The rest of the house is fine. The controller can also watch for weird power readings and revoke the stolen device.
+
+\textbf{Rogue device joining.} Someone might try to connect their own malicious device to the network. By forcing a physical button press on the controller to allow new pairings, we make remote registration basically impossible.
+
+\section{Cryptographic Threats}
+
+These threats are directly aimed at our cryptographic choices.
+
+\textbf{Replay attacks.} Someone could record a valid command and try sending it again later. We stop this by using a constantly increasing per-device counter as the GCM nonce. The receiving end just drops any message where the counter is less than or equal to the last one it saw.
+
+\textbf{Man-in-the-middle at pairing.} An attacker could intercept the ECDH setup and swap in their own public key, secretly establishing separate connections with both the device and the controller. We block this by having the controller sign its public key with Ed25519. The device verifies this against a pre-known public key installed at the factory. The physical button press also severely limits the time window for anyone to try this.
+
+\textbf{Nonce reuse in AES-GCM.} Reusing a nonce with the same key in GCM is a total disaster. It leaks the key and completely breaks the authentication. By using a strict, deterministic counter, we completely avoid the risk of bad random number generators repeating nonces. The counter has to be saved in non-volatile memory so a rebooting device doesn't start over at zero.
+
+\textbf{Key compromise of a device.} If a device is stolen and its key is pulled from memory, any recorded past traffic for that specific device can be decrypted. Because we isolate keys, the rest of the house is safe. Doing a periodic re-key helps limit how much history is exposed. We don't have perfect forward secrecy, but as noted in Section \ref{sec:tradeoffs}, that is an accepted trade-off.
+
+\textbf{Brute force and cryptanalysis of AES-128.} A 128-bit key is completely immune to classical brute force attacks. There are no known practical ways to break AES-128-GCM today. Looking ahead, quantum computers using Grover's algorithm could halve the effective security to 64 bits, which is definitely too weak. This is a future problem, so we designed the system to be crypto agile. When quantum threats get real, we can easily swap to AES-256-GCM, accepting a tiny bit more overhead on the edge nodes.
+
+\textbf{Birthday attacks on GCM.} GCM using 96-bit nonces hits a birthday bound around $2^{48}$ messages, at which point collisions become a real worry. At one message every 30 seconds for 10 years, we only generate around 10 million messages, or about $2^{23}$. We are so far below the bound that it isn't a concern.
+
+\textbf{Downgrade attack.} An attacker might try to force the devices to negotiate a weaker algorithm during setup. We solve this by simply not having algorithm negotiation. The primitives are hardcoded into the system, so there is nothing to downgrade to.
+
+\end{document}
