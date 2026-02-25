@@ -74,3 +74,43 @@ pub fn decrypt_with_keystream(ciphertexts: &[Vec<u8>], keystream: &[u8]) -> Vec<
         })
         .collect()
 }
+
+/// Truncate all ciphertexts to the length of the shortest one. Returns the truncated list and
+/// the common length (min_len). Useful before a repeating-key-XOR-style attack.
+pub fn truncate_to_min_length(ciphertexts: &[Vec<u8>]) -> (Vec<Vec<u8>>, usize) {
+    let min_len = ciphertexts
+        .iter()
+        .map(|c| c.len())
+        .min()
+        .expect("empty ciphertext list");
+    let truncated: Vec<Vec<u8>> = ciphertexts
+        .iter()
+        .map(|c| c[..min_len].to_vec())
+        .collect();
+    (truncated, min_len)
+}
+
+/// Recover keystream by treating concatenated ciphertext as repeating-key XOR with the given
+/// keysize. Layout: concatenated = [ct0, ct1, ...] (each ct has length keysize), so byte at
+/// index `idx` corresponds to key byte at `idx % keysize`. Uses `score_byte_english`.
+pub fn recover_keystream_repeating_key_style(concatenated: &[u8], keysize: usize) -> Vec<u8> {
+    recover_keystream_repeating_key_style_with_scorer(concatenated, keysize, score_byte_english)
+}
+
+/// Same as `recover_keystream_repeating_key_style` with a custom byte scorer.
+pub fn recover_keystream_repeating_key_style_with_scorer(
+    concatenated: &[u8],
+    keysize: usize,
+    score: fn(u8) -> i32,
+) -> Vec<u8> {
+    let mut keystream = vec![0u8; keysize];
+    for i in 0..keysize {
+        let column: Vec<u8> = concatenated
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, &b)| if idx % keysize == i { Some(b) } else { None })
+            .collect();
+        keystream[i] = recover_keystream_byte(&column, score);
+    }
+    keystream
+}
