@@ -1,6 +1,6 @@
 // MT19937 Mersenne Twister (32-bit) RNG implementation, based on the reference algorithm.
 
-const N: usize = 624;
+pub const N: usize = 624;
 const M: usize = 397;
 const MATRIX_A: u32 = 0x9908_B0DF;
 const UPPER_MASK: u32 = 0x8000_0000;
@@ -13,6 +13,12 @@ pub struct Mt19937 {
 }
 
 impl Mt19937 {
+    /// Create a new MT19937 instance from a full state array (e.g. after untempering 624 outputs).
+    /// Set index to N so the next `next_u32` triggers a twist, then yields the same sequence as the original.
+    pub fn from_state(mt: [u32; N]) -> Self {
+        Self { mt, index: N }
+    }
+
     /// Create a new MT19937 instance seeded with the given 32-bit value.
     pub fn new(seed: u32) -> Self {
         let mut mt = [0u32; N];
