@@ -6,10 +6,12 @@ pub fn hex_decode(s: &str) -> Vec<u8> {
 
     let chars: Vec<char> = s.chars().collect();
 
+    // Iterate over the string in pairs of 2 characters
     for i in (0..s.len()).step_by(2) {
         let high = hex_value(chars[i]);
         let low = hex_value(chars[i+1]);
 
+        // Combine the high and low nibbles to form a single byte
         let byte = (high << 4) | low;
         bytes.push(byte);
     }
@@ -28,6 +30,7 @@ pub fn hex_encode(bytes: &[u8]) -> String {
     hex
 }
 
+// Map a byte to its corresponding hex character
 fn hex_char(byte: u8) -> char {
     match byte {
         0..=9 => (b'0' + byte) as char, // 48u8 
@@ -36,7 +39,7 @@ fn hex_char(byte: u8) -> char {
     }
 }
 
-
+// Map a hex character to its corresponding value
 fn hex_value(c: char) -> u8 {
     match c {
         '0'..='9' => c as u8 - b'0', // 48u8
@@ -46,6 +49,7 @@ fn hex_value(c: char) -> u8 {
     }
 }
 
+// Encode a byte array to a base64 string
 pub fn base64_encode(bytes: &[u8]) -> String {
     let mut base64 = String::with_capacity(bytes.len() * 2);
     
