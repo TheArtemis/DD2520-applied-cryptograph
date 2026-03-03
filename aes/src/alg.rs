@@ -9,8 +9,9 @@ pub struct AES128 {
 impl AES128 {
     pub fn new(key: [u8; 16]) -> Self {
         Self { key }
-    }   
+    } 
 
+    // Since it's aes 128, there are 10 rounds of encryption/decryption
     pub fn cipher(&self, state: &mut State) {
         let key_schedule = self.key_expansion(self.key);
         
@@ -34,6 +35,7 @@ impl AES128 {
 
         self.add_round_key(state, &key_schedule[10]);
 
+        // First 9 rounds
         for i in (1..10).rev() {
             self.inv_shift_rows(state);
             self.inv_sub_bytes(state);
@@ -41,15 +43,18 @@ impl AES128 {
             self.inv_mix_columns(state);
         }
 
+        // Last round
         self.inv_shift_rows(state);
         self.inv_sub_bytes(state);
         self.add_round_key(state, &key_schedule[0]);
     }
 
+    // XORs the state with a round-specific subkey derived from the main key via expansion, integrating key material per round
     fn add_round_key(&self, state: &mut State, round_key: &State) {
         *state ^= *round_key;
     }
 
+    // Substitutes each byte using a non-linear S-box lookup table to introduce confusion, ensuring no byte maps to itself or its complement.
     fn sub_bytes(&self, state: &mut State) {
         for row in 0..4 {
             for col in 0..4 {
@@ -58,6 +63,7 @@ impl AES128 {
         }
     }
 
+    // Substitutes each byte using the inverse S-box lookup table to reverse the confusion introduced by sub_bytes, ensuring each byte maps back to its original value
     fn inv_sub_bytes(&self, state: &mut State) {
         for row in 0..4 {
             for col in 0..4 {
@@ -66,6 +72,7 @@ impl AES128 {
         }
     }
 
+    // Cyclically shifts rows left (0, 1, 2, 3 positions for rows 1-4) to provide diffusion across columns, preventing independent column encryption
     fn shift_rows(&self, state: &mut State) {
         // row 0: no shift
         // row 1: left shift by 1
@@ -91,6 +98,7 @@ impl AES128 {
         state[(3, 0)] = temp;
     }
 
+    // performs the inverse shift rows operation on all rows of the state, reversing the diffusion introduced by shift rows to ensure consistent decryption
     fn inv_shift_rows(&self, state: &mut State) {
         // row 0: no shift
         // row 1: right shift by 1 (inverse of left by 1)
@@ -116,6 +124,7 @@ impl AES128 {
         state[(3, 3)] = temp;
     }
 
+    // performs the MixColumns operation on all columns of the state, mixing the bytes to provide diffusion across columns
     fn mix_columns(&self, state: &mut State) {
         for col in 0..4 {
             let mut column = state.get_col(col);
@@ -124,6 +133,7 @@ impl AES128 {
         }
     }
 
+    // performs the MixColumns operation on a single column of the state, mixing the bytes to provide diffusion across columns
     fn mix_column(&self, vec: &mut [u8]) {  
         
         // matrix representation:
@@ -150,6 +160,7 @@ impl AES128 {
         }
     }
 
+    // performs the inverse MixColumns operation on a single column of the state, reversing the diffusion introduced by MixColumns to ensure consistent decryption
     fn inv_mix_column(&self, vec: &mut [u8]) {
         // Inverse MixColumns matrix in GF(2^8):
         // | 0e 0b 0d 09 |
@@ -164,6 +175,7 @@ impl AES128 {
         vec[3] = gf256_mul(a, 0x0b) ^ gf256_mul(b, 0x0d) ^ gf256_mul(c, 0x09) ^ gf256_mul(d, 0x0e);
     }
 
+    // generates multiple round keys from the initial cipher key for use in each encryption/decryption round. It  ensures each round has a unique subkey, (diffusion) and preventing simple key reuse attacks
     fn key_expansion(&self, key: [u8; 16]) -> Vec<State> {
         // split key into 4 words (w[0..3])
         let mut words: [[u8; 4]; 44] = [[0; 4]; 44];
@@ -214,16 +226,19 @@ impl AES128 {
         keys
     }
 
+    // rotates the bytes in a word left by one position, effectively shifting the bytes circularly to the left
     fn rot_word(&self, word: [u8; 4]) -> [u8; 4] {
         let [a, b, c, d] = word;
         [b, c, d, a]
     }
 
+    // substitutes each byte in the word using the AES S-box to introduce confusion, ensuring no byte maps to itself or its complement
     fn sub_word(&self, word: [u8; 4]) -> [u8; 4] {
         let [a, b, c, d] = word;
         [AES_SBOX[a as usize], AES_SBOX[b as usize], AES_SBOX[c as usize], AES_SBOX[d as usize]]
     }
 
+    // generates a round constant for the given round number, used to mix key material into the round key
     fn rcon(&self, round: usize) -> [u8; 4] {        
         const RCON_TABLE: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36];
         
