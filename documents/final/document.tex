@@ -86,12 +86,12 @@ Pairing starts when someone physically presses a button on both the controller a
 Device                                                          Controller
   |                                                                  |
   | -- Device_ID, capabilities, ECDH_pub_D ------------------------->|
-  | <---- ECDH_pub_C, Sign(ECDH_pub_C) ----------------------------- |
-  |   [Both derive K_dc = HKDF(ECDH_secret, ECDH_pub_C, ECDH_pub_D)] |
+  | <---- ECDH_pub_C, Sign(Device_ID | ECDH_pub_D | ECDH_pub_C) ---- |
+  |   [Both derive K_dc = HKDF(ECDH_secret, transcript)]             |
   | <--- {Device_ID, counter_init=0}_{K_dc} ------------------------ |
 \end{verbatim}
 
-The controller signs its ECDH public key. The device checks this signature to make sure it is talking to the real controller before deriving the shared symmetric key.
+The controller signs the full handshake transcript (Device\_ID, ECDH\_pub\_D, ECDH\_pub\_C). This binds authentication to this specific pairing session and prevents replay or substitution of authenticated key shares.
 
 \subsection*{Subprotocol 2: Power Reporting}
 
@@ -170,7 +170,7 @@ We really only need true randomness when generating the initial ECDH keys.
 
 For the daily messages, we use deterministic counters for the nonces so we don't have to rely on cheap hardware entropy.
 
-The controller just uses the secure random source provided by its operating system. The smart devices need to pull from hardware TRNGs if they have them, and they absolutely cannot use factory-cloned deterministic keys.
+The controller obtains randomness from the operating system's cryptographically secure pseudorandom number generator (CSPRNG), such as \texttt{getrandom()} or \texttt{/dev/urandom} on Linux systems. These interfaces are seeded from multiple system entropy sources and are suitable for generating cryptographic keys. The smart devices need to pull from hardware TRNGs if they have them, and they absolutely cannot use factory-cloned deterministic keys.
 
 \section{Trade-offs and Risks}\label{sec:tradeoffs}
 
